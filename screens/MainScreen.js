@@ -1,3 +1,4 @@
+import InventoryScreen from './InventoryScreen';
 import { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, Text, View, FlatList,
@@ -788,93 +789,10 @@ export default function MainStore({ staff, onLogout }) {
           </View>
         )}
 
-        {/* ══ STOCK TAB ══ */}
-        {tab === 'stock' && (
-          <View style={{ flex: 1 }}>
-            <View style={s.stockSearchBox}>
-              <Text style={{ fontSize: 16 }}>🔍</Text>
-              <TextInput
-                style={s.stockSearchInput}
-                placeholder="Search products..."
-                placeholderTextColor="rgba(255,255,255,0.25)"
-                value={stockSearch}
-                onChangeText={setStockSearch}
-              />
-            </View>
-            <FlatList
-              data={filteredStock}
-              keyExtractor={i => i.id.toString()}
-              contentContainerStyle={{ padding: 12 }}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={async () => {
-                    setRefreshing(true);
-                    await fetchProducts();
-                    setRefreshing(false);
-                  }}
-                  tintColor={G}
-                />
-              }
-              ListEmptyComponent={() => (
-                <View style={s.centerBox}>
-                  <Text style={s.emptyText}>No products found</Text>
-                </View>
-              )}
-              renderItem={({ item }) => (
-                <View style={[s.stockCard,
-                  item.stock_qty <= 5 && item.stock_qty > 0 &&
-                  s.stockCardLow,
-                  item.stock_qty === 0 && s.stockCardOut
-                ]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.stockName}>{item.name_en}</Text>
-                    <Text style={s.stockSku}>{item.sku}</Text>
-                    <Text style={[s.stockQty,
-                      item.stock_qty === 0
-                        ? { color: '#EF4444' }
-                        : item.stock_qty <= 5
-                        ? { color: '#F59E0B' }
-                        : { color: G }]}>
-                      {item.stock_qty === 0
-                        ? '❌ Out of stock'
-                        : item.stock_qty <= 5
-                        ? `⚠️ Low: ${item.stock_qty} left`
-                        : `✅ ${item.stock_qty} in stock`}
-                    </Text>
-                  </View>
-                  <View style={s.stockActions}>
-                    <TouchableOpacity
-                      style={s.stockBtn}
-                      onPress={() => Alert.alert(
-                        'Update Stock',
-                        `${item.name_en}\nCurrent: ${item.stock_qty}`,
-                        [
-                          { text: '+1',
-                            onPress: () => updateStock(
-                              item.id, item.stock_qty + 1
-                            )},
-                          { text: '+5',
-                            onPress: () => updateStock(
-                              item.id, item.stock_qty + 5
-                            )},
-                          { text: '+10',
-                            onPress: () => updateStock(
-                              item.id, item.stock_qty + 10
-                            )},
-                          { text: 'Cancel', style: 'cancel' }
-                        ]
-                      )}
-                    >
-                      <Text style={s.stockBtnText}>+ Add</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            />
-          </View>
-        )}
-
+       {/* ══ STOCK TAB ══ */}
+{tab === 'stock' && (
+  <InventoryScreen />
+)}
         {/* ══ REPORTS TAB ══ */}
         {tab === 'reports' && (
           <ScrollView

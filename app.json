@@ -8,12 +8,12 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#020612"
+      "backgroundColor": "#07111F"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#020612"
+        "backgroundColor": "#07111F"
       },
       "package": "com.rahulautospares.app"
     },
@@ -21,6 +21,7 @@
       "eas": {
         "projectId": "02693dd5-74df-488e-ba61-7a16ab7b8965"
       }
-    }
+    },
+    "icon": "./assets/icon.png"
   }
 }
