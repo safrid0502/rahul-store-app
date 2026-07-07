@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import QRScannerScreen from './QRScannerScreen';
 import BroadcastScreen from './BroadcastScreen';
@@ -27,8 +28,8 @@ const STATUS_COLORS = {
   ready: '#22C55E', collected: 'rgba(255,255,255,0.3)'
 };
 const STATUS_LABELS = {
-  new: '🆕 New', packing: '📦 Packing',
-  ready: '✅ Ready', collected: '🏁 Done'
+  new: 'New Order', packing: 'Packing',
+  ready: 'Ready', collected: 'Collected'
 };
 
 const AVATAR_OPTIONS = [
@@ -55,11 +56,11 @@ const getDefaultAvatar = (role) => {
 // ── BOTTOM NAV ──
 function BottomNav({ active, onChange, newCount }) {
   const tabs = [
-    { id: 'orders',  icon: '📋', label: 'Orders', badge: newCount },
-    { id: 'scanner', icon: '📷', label: 'Scan QR' },
-    { id: 'stock',   icon: '📦', label: 'Stock' },
-    { id: 'reports', icon: '📊', label: 'Reports' },
-    { id: 'profile', icon: '👤', label: 'Me' },
+    { id: 'orders',  icon: 'receipt-outline',     label: 'Orders', badge: newCount },
+    { id: 'stock',   icon: 'cube-outline',          label: 'Stock' },
+    { id: 'vendors', icon: 'business-outline',      label: 'Vendors' },
+    { id: 'reports', icon: 'bar-chart-outline',     label: 'Reports' },
+    { id: 'profile', icon: 'person-circle-outline', label: 'Me' },
   ];
   return (
     <View style={nb.bar}>
@@ -70,7 +71,11 @@ function BottomNav({ active, onChange, newCount }) {
             onChange(tab.id);
           }}>
           <View style={nb.iconWrap}>
-            <Text style={nb.icon}>{tab.icon}</Text>
+            <Ionicons
+              name={active === tab.id ? tab.icon.replace('-outline','') : tab.icon}
+              size={22}
+              color={active === tab.id ? '#22C55E' : 'rgba(255,255,255,0.35)'}
+            />
             {tab.badge > 0 && (
               <View style={nb.badge}>
                 <Text style={nb.badgeText}>{tab.badge}</Text>
@@ -112,7 +117,7 @@ function StatCard({ icon, label, value, color }) {
   return (
     <View style={[sc.card, { borderColor: color + '30' }]}>
       <View style={[sc.iconBox, { backgroundColor: color + '15' }]}>
-        <Text style={sc.icon}>{icon}</Text>
+        <Ionicons name={icon} size={20} color={color} />
       </View>
       <Text style={sc.label}>{label}</Text>
       <Text style={[sc.value, { color }]}>{value}</Text>
@@ -517,10 +522,34 @@ export default function MainStore({ staff, onLogout }) {
   const [showAttendance, setShowAttendance] = useState(false);
   const [showSalesDashboard, setShowSalesDashboard] = useState(false);
 
+  const [orderSearch, setOrderSearch] = useState('');
+  const [vendors, setVendors] = useState([
+    { id: 1, name: 'Hero MotoCorp Dealer', phone: '9000000001', area: 'Nandyal', parts: 'Hero parts', whatsapp: '919000000001' },
+    { id: 2, name: 'Honda Parts Supplier', phone: '9000000002', area: 'Kurnool', parts: 'Honda parts', whatsapp: '919000000002' },
+    { id: 3, name: 'TVS Distributor', phone: '9000000003', area: 'Nandyal', parts: 'TVS parts', whatsapp: '919000000003' },
+    { id: 4, name: 'Bajaj Parts Dealer', phone: '9000000004', area: 'Kurnool', parts: 'Bajaj parts', whatsapp: '919000000004' },
+    { id: 5, name: 'Engine Oil Supplier', phone: '9000000005', area: 'Nandyal', parts: 'Oils & Lubricants', whatsapp: '919000000005' },
+  ]);
+  const [showAddVendor, setShowAddVendor] = useState(false);
+  const [vendorName, setVendorName] = useState('');
+  const [vendorPhone, setVendorPhone] = useState('');
+  const [vendorArea, setVendorArea] = useState('');
+  const [vendorParts, setVendorParts] = useState('');
+  const [expandedVendor, setExpandedVendor] = useState(null);
+  const [vendorOrderNote, setVendorOrderNote] = useState('');
   const isOwner  = staff?.role === 'owner';
   const isSenior = staff?.role === 'senior';
   const newCount = orders.filter(o => o.status === 'new').length;
 
+  const searchedOrders = orders.filter(o => {
+    if (!orderSearch) return true;
+    const q = orderSearch.toLowerCase();
+    return (
+      (o.customer_name || '').toLowerCase().includes(q) ||
+      (o.customer_phone || '').toLowerCase().includes(q) ||
+      (o.custom_id || '').toLowerCase().includes(q)
+    );
+  });
   const filteredStock = products.filter(p =>
     !stockSearch ||
     p.name_en?.toLowerCase().includes(stockSearch.toLowerCase()) ||
@@ -576,6 +605,23 @@ export default function MainStore({ staff, onLogout }) {
   };
 
   // ── ORDERS ──
+  const updateStatus = async (orderId, newStatus) => {
+    try {
+      await fetch(`${API_URL}/orders/${orderId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (newStatus === 'ready') {
+        fetch(`${API_URL}/notify/order-ready/${orderId}`, { method: 'POST' }).catch(() => {});
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      fetchOrders();
+    } catch {
+      Alert.alert('Error', 'Could not update status');
+    }
+  };
+
   const fetchOrders = async () => {
     try {
       const r = await fetch(`${API_URL}/orders`);
@@ -616,22 +662,6 @@ export default function MainStore({ staff, onLogout }) {
     } catch { setOrderItems([]); }
   };
 
-  const updateStatus = async (orderId, status) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      await fetch(`${API_URL}/orders/${orderId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, collected_by: staff?.name || '' })
-      });
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
-      if (selectedOrder?.id === orderId)
-        setSelectedOrder(prev => ({ ...prev, status }));
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (status === 'ready')
-        fetch(`${API_URL}/notify/order-ready/${orderId}`, { method: 'POST' }).catch(() => {});
-    } catch { Alert.alert('❌ Error', 'Could not update. Check internet.'); }
-  };
 
   const updatePayment = async (orderId, type) => {
     try {
@@ -920,8 +950,8 @@ export default function MainStore({ staff, onLogout }) {
       <View style={s.header}>
         <View style={{ flex: 1 }}>
           <Text style={s.headerRole}>
-            {staff?.role === 'owner' ? '👑 OWNER'
-              : staff?.role === 'senior' ? '⭐ SENIOR STAFF' : '👷 STAFF'}
+            {staff?.role === 'owner' ? 'OWNER'
+              : staff?.role === 'senior' ? 'SENIOR STAFF' : 'STAFF'}
           </Text>
           <Text style={s.headerName}>{staff?.name}</Text>
         </View>
@@ -932,11 +962,11 @@ export default function MainStore({ staff, onLogout }) {
         )}
         {newCount > 0 && (
           <View style={s.newOrderBadge}>
-            <Text style={s.newOrderBadgeText}>🔔 {newCount} NEW</Text>
+            <Text style={s.newOrderBadgeText}>{newCount} NEW ORDERS</Text>
           </View>
         )}
         <TouchableOpacity style={s.refreshBtn} onPress={onRefresh}>
-          <Text>🔄</Text>
+          <Ionicons name="refresh" size={20} color="rgba(255,255,255,0.6)" />
         </TouchableOpacity>
       </View>
 
@@ -945,21 +975,37 @@ export default function MainStore({ staff, onLogout }) {
         {/* ══ ORDERS TAB ══ */}
         {tab === 'orders' && (
           <View style={{ flex: 1 }}>
+            {/* ORDER SEARCH */}
+            <View style={s.orderSearchBox}>
+              <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.3)" />
+              <TextInput
+                style={s.orderSearchInput}
+                placeholder="Search by customer name or phone..."
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={orderSearch}
+                onChangeText={setOrderSearch}
+              />
+              {orderSearch.length > 0 && (
+                <TouchableOpacity onPress={() => setOrderSearch('')}>
+                  <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.3)" />
+                </TouchableOpacity>
+              )}
+            </View>
             <View style={s.statsRow}>
-              <StatCard icon="🆕" label="New" value={orders.filter(o=>o.status==='new').length} color="#4F6EF7" />
-              <StatCard icon="📦" label="Packing" value={orders.filter(o=>o.status==='packing').length} color="#F59E0B" />
-              <StatCard icon="✅" label="Ready" value={orders.filter(o=>o.status==='ready').length} color={G} />
-              <StatCard icon="🏁" label="Done" value={orders.filter(o=>o.status==='collected').length} color="rgba(255,255,255,0.4)" />
+              <StatCard icon="receipt-outline" label="New" value={orders.filter(o=>o.status==='new').length} color="#4F6EF7" />
+              <StatCard icon="cube-outline" label="Packing" value={orders.filter(o=>o.status==='packing').length} color="#F59E0B" />
+              <StatCard icon="checkmark-circle-outline" label="Ready" value={orders.filter(o=>o.status==='ready').length} color={G} />
+              <StatCard icon="flag-outline" label="Done" value={orders.filter(o=>o.status==='collected').length} color="rgba(255,255,255,0.4)" />
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false}
               style={s.filterScroll} contentContainerStyle={s.filterRow}>
               {[
                 { id: 'all', label: `All (${orders.length})` },
-                { id: 'new', label: `🆕 New (${orders.filter(o=>o.status==='new').length})` },
-                { id: 'packing', label: '📦 Packing' },
-                { id: 'ready', label: '✅ Ready' },
-                { id: 'collected', label: '🏁 Done' },
+                { id: 'new', label: `New (${orders.filter(o=>o.status==='new').length})` },
+                { id: 'packing', label: 'Packing' },
+                { id: 'ready', label: 'Ready' },
+                { id: 'collected', label: 'Done' },
               ].map(f => (
                 <TouchableOpacity key={f.id}
                   style={[s.filterChip, statusFilter===f.id && s.filterChipActive]}
@@ -977,7 +1023,7 @@ export default function MainStore({ staff, onLogout }) {
               </View>
             ) : orders.filter(o => statusFilter==='all' || o.status===statusFilter).length === 0 ? (
               <View style={s.centerBox}>
-                <Text style={{ fontSize: 48, marginBottom: 12 }}>📋</Text>
+                <Ionicons name="receipt-outline" size={48} color="rgba(255,255,255,0.2)" style={{ marginBottom: 12 }} />
                 <Text style={s.emptyText}>
                   {statusFilter === 'all' ? 'No orders yet!' : `No ${statusFilter} orders`}
                 </Text>
@@ -1003,14 +1049,14 @@ export default function MainStore({ staff, onLogout }) {
                       </View>
                       <Text style={s.orderAmt}>₹{item.total_amount}</Text>
                     </View>
-                    <Text style={s.orderCustomer}>👤 {item.customer_name || 'Customer'}</Text>
+                    <Text style={s.orderCustomer}>{item.customer_name || 'Customer'}</Text>
                     {item.customer_phone && (
                       <TouchableOpacity onPress={() => Linking.openURL(`tel:${item.customer_phone}`)}>
-                        <Text style={s.orderPhone}>📞 {item.customer_phone}</Text>
+                        <Text style={s.orderPhone}>{item.customer_phone}</Text>
                       </TouchableOpacity>
                     )}
                     {item.pickup_time && (
-                      <Text style={s.orderPickup}>📅 {item.pickup_time}</Text>
+                      <Text style={s.orderPickup}>Pickup: {item.pickup_time}</Text>
                     )}
                     <View style={s.orderBottom}>
                       <View style={[s.statusPill, {
@@ -1021,8 +1067,26 @@ export default function MainStore({ staff, onLogout }) {
                           {STATUS_LABELS[item.status]||item.status}
                         </Text>
                       </View>
-                      <Text style={s.tapHint}>Tap to manage →</Text>
                     </View>
+                    {/* QUICK ACTION BUTTONS */}
+                    {item.status === 'new' && (
+                      <TouchableOpacity style={s.quickStatusBtn}
+                        onPress={(e) => { e.stopPropagation(); updateStatus(item.id, 'packing'); }}>
+                        <Text style={s.quickStatusBtnText}>Mark as Packing</Text>
+                      </TouchableOpacity>
+                    )}
+                    {item.status === 'packing' && (
+                      <TouchableOpacity style={[s.quickStatusBtn, { backgroundColor: 'rgba(34,197,94,0.15)', borderColor: 'rgba(34,197,94,0.4)' }]}
+                        onPress={(e) => { e.stopPropagation(); updateStatus(item.id, 'ready'); }}>
+                        <Text style={[s.quickStatusBtnText, { color: '#22C55E' }]}>Mark as Ready</Text>
+                      </TouchableOpacity>
+                    )}
+                    {item.status === 'ready' && (
+                      <TouchableOpacity style={[s.quickStatusBtn, { backgroundColor: 'rgba(107,114,128,0.15)', borderColor: 'rgba(107,114,128,0.4)' }]}
+                        onPress={(e) => { e.stopPropagation(); updateStatus(item.id, 'collected'); }}>
+                        <Text style={[s.quickStatusBtnText, { color: '#9CA3AF' }]}>Mark as Collected</Text>
+                      </TouchableOpacity>
+                    )}
                   </TouchableOpacity>
                 )}
               />
@@ -1054,7 +1118,7 @@ export default function MainStore({ staff, onLogout }) {
               onPress={() => setShowAddProduct(true)} activeOpacity={0.8}>
               <View style={s.addProductBannerLeft}>
                 <View style={s.addProductBannerIcon}>
-                  <Text style={{ fontSize: 28 }}>➕</Text>
+                  <Ionicons name="add-circle" size={28} color="#22C55E" />
                 </View>
                 <View>
                   <Text style={s.addProductBannerTitle}>Add New Product</Text>
@@ -1163,6 +1227,165 @@ export default function MainStore({ staff, onLogout }) {
         )}
 
         {/* ══ REPORTS TAB ══ */}
+        {/* ══ VENDORS TAB ══ */}
+        {tab === 'vendors' && (
+          <View style={{ flex: 1 }}>
+            <View style={s.vendorHeader}>
+              <Text style={s.vendorHeaderTitle}>Suppliers & Vendors</Text>
+              <TouchableOpacity style={s.addVendorBtn}
+                onPress={() => setShowAddVendor(!showAddVendor)}>
+                <Ionicons name="add" size={20} color="#22C55E" />
+                <Text style={s.addVendorBtnText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* ADD VENDOR FORM */}
+            {showAddVendor && (
+              <View style={s.addVendorForm}>
+                <Text style={s.addVendorFormTitle}>Add New Vendor</Text>
+                {[
+                  { placeholder: 'Vendor Name *', value: vendorName, setter: setVendorName },
+                  { placeholder: 'Phone Number *', value: vendorPhone, setter: setVendorPhone, keyboard: 'phone-pad' },
+                  { placeholder: 'Area / Location', value: vendorArea, setter: setVendorArea },
+                  { placeholder: 'Parts they supply', value: vendorParts, setter: setVendorParts },
+                ].map((field, i) => (
+                  <TextInput key={i} style={s.vendorInput}
+                    placeholder={field.placeholder}
+                    placeholderTextColor="rgba(255,255,255,0.2)"
+                    value={field.value}
+                    onChangeText={field.setter}
+                    keyboardType={field.keyboard || 'default'} />
+                ))}
+                <TouchableOpacity style={s.saveVendorBtn}
+                  onPress={() => {
+                    if (!vendorName || !vendorPhone) {
+                      Alert.alert('Required', 'Name and phone are required');
+                      return;
+                    }
+                    const newVendor = {
+                      id: Date.now(), name: vendorName, phone: vendorPhone,
+                      area: vendorArea, parts: vendorParts,
+                      whatsapp: `91${vendorPhone}`
+                    };
+                    setVendors(v => [...v, newVendor]);
+                    setVendorName(''); setVendorPhone('');
+                    setVendorArea(''); setVendorParts('');
+                    setShowAddVendor(false);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  }}>
+                  <Text style={s.saveVendorBtnText}>Save Vendor</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <ScrollView contentContainerStyle={{ padding: 12 }}>
+              {vendors.map(vendor => {
+                const isExpanded = expandedVendor === vendor.id;
+                return (
+                  <View key={vendor.id} style={s.vendorCard}>
+                    {/* VENDOR HEADER */}
+                    <TouchableOpacity style={s.vendorCardTop}
+                      onPress={() => setExpandedVendor(isExpanded ? null : vendor.id)}>
+                      <View style={s.vendorAvatar}>
+                        <Ionicons name="business" size={20} color="#22C55E" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.vendorName}>{vendor.name}</Text>
+                        <Text style={s.vendorParts}>{vendor.parts}</Text>
+                        <Text style={s.vendorArea}>{vendor.area} · {vendor.phone}</Text>
+                      </View>
+                      <Ionicons
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={18} color="rgba(255,255,255,0.3)" />
+                    </TouchableOpacity>
+
+                    {/* QUICK ACTION BUTTONS - always visible */}
+                    <View style={s.vendorQuickBtns}>
+                      <TouchableOpacity style={s.vendorQuickBtn}
+                        onPress={() => Linking.openURL(`tel:${vendor.phone}`)}>
+                        <Ionicons name="call" size={14} color="#22C55E" />
+                        <Text style={s.vendorQuickBtnText}>Call</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[s.vendorQuickBtn, { borderColor: 'rgba(37,211,102,0.3)' }]}
+                        onPress={() => Linking.openURL(`https://wa.me/${vendor.whatsapp}?text=Hi, need spare parts`)}>
+                        <Ionicons name="logo-whatsapp" size={14} color="#25D366" />
+                        <Text style={[s.vendorQuickBtnText, { color: '#25D366' }]}>WhatsApp</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[s.vendorQuickBtn, { borderColor: 'rgba(79,110,247,0.3)', flex: 1.5 }]}
+                        onPress={() => setExpandedVendor(isExpanded ? null : vendor.id)}>
+                        <Ionicons name="cart" size={14} color="#4F6EF7" />
+                        <Text style={[s.vendorQuickBtnText, { color: '#4F6EF7' }]}>Place Order</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* EXPANDED ORDER SECTION */}
+                    {isExpanded && (
+                      <View style={s.vendorOrderSection}>
+                        <Text style={s.vendorOrderTitle}>Place Inventory Order</Text>
+
+                        <Text style={s.vendorOrderLabel}>Items needed (one per line)</Text>
+                        <TextInput
+                          style={s.vendorOrderInput}
+                          placeholder={`e.g.\nHero Splendor Brake Shoes x10\nHonda CB Shine Air Filter x5\nEngine Oil 1L x20`}
+                          placeholderTextColor="rgba(255,255,255,0.2)"
+                          value={vendorOrderNote}
+                          onChangeText={setVendorOrderNote}
+                          multiline numberOfLines={4}
+                          textAlignVertical="top"
+                        />
+
+                        <View style={s.vendorOrderBtns}>
+                          <TouchableOpacity style={s.vendorSendWaBtn}
+                            onPress={() => {
+                              const msg =
+                                `━━━━━━━━━━━━━━━━━━━━\n` +
+                                `*INVENTORY ORDER REQUEST*\n` +
+                                `━━━━━━━━━━━━━━━━━━━━\n\n` +
+                                `*From:* New Rahul Auto Spares\n` +
+                                `*Location:* Telugu Peta, Nandyal\n` +
+                                `*Date:* ${new Date().toLocaleDateString('en-IN')}\n\n` +
+                                `*Items Required:*\n` +
+                                `${vendorOrderNote || 'Please share latest price list'}\n\n` +
+                                `*Contact:* Abdul Azeez Basheer\n` +
+                                `*Phone:* +91 9642536653\n` +
+                                `━━━━━━━━━━━━━━━━━━━━`;
+                              Linking.openURL(`https://wa.me/${vendor.whatsapp}?text=${encodeURIComponent(msg)}`);
+                            }}>
+                            <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                            <Text style={s.vendorSendWaBtnText}>Send via WhatsApp</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity style={s.vendorCallOrderBtn}
+                            onPress={() => Linking.openURL(`tel:${vendor.phone}`)}>
+                            <Ionicons name="call" size={16} color="#22C55E" />
+                          </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity style={s.vendorDeleteFullBtn}
+                          onPress={() => {
+                            Alert.alert('Remove Vendor?', `Delete ${vendor.name}?`, [
+                              { text: 'Cancel', style: 'cancel' },
+                              { text: 'Delete', style: 'destructive',
+                                onPress: () => {
+                                  setVendors(v => v.filter(vv => vv.id !== vendor.id));
+                                  setExpandedVendor(null);
+                                }
+                              }
+                            ]);
+                          }}>
+                          <Ionicons name="trash-outline" size={14} color="rgba(239,68,68,0.6)" />
+                          <Text style={s.vendorDeleteFullBtnText}>Remove Vendor</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+              <View style={{ height: 80 }} />
+            </ScrollView>
+          </View>
+        )}
+
         {tab === 'reports' && (
           <ScrollView contentContainerStyle={{ padding: 14 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={G} />}>
@@ -1194,9 +1417,9 @@ export default function MainStore({ staff, onLogout }) {
             </View>
 
             <View style={s.statsRow}>
-              <StatCard icon="📦" label="Orders" value={summary?.total_orders||0} color="#4F6EF7" />
-              <StatCard icon="💵" label="Cash" value={`₹${(summary?.payment_breakdown?.cash||0).toFixed(0)}`} color={G} />
-              <StatCard icon="⏳" label="Pending" value={`₹${(summary?.payment_breakdown?.pending||0).toFixed(0)}`} color="#F59E0B" />
+              <StatCard icon="receipt-outline" label="Orders" value={summary?.total_orders||0} color="#4F6EF7" />
+              <StatCard icon="cash-outline" label="Cash" value={`₹${(summary?.payment_breakdown?.cash||0).toFixed(0)}`} color={G} />
+              <StatCard icon="analytics-outline" label="Pending" value={`₹${(summary?.payment_breakdown?.pending||0).toFixed(0)}`} color="#F59E0B" />
             </View>
 
             <GoalRing current={summary?.total_revenue||0} target={10000} />
@@ -1392,28 +1615,28 @@ export default function MainStore({ staff, onLogout }) {
 
             {/* MY STATS */}
             <View style={s.statsCardProfile}>
-              <Text style={s.statsCardTitle}>📊 My Stats This Month</Text>
+              <Text style={s.statsCardTitle}>My Stats This Month</Text>
               <View style={s.statsGridProfile}>
                 {[
-                  { icon:'📦', label:'Packed', value:staffStats?.packed||0, color:'#F59E0B' },
-                  { icon:'🏁', label:'Completed', value:staffStats?.collected||0, color:G },
-                  { icon:'💰', label:'Revenue', value:`₹${((staffStats?.revenue||0)/1000).toFixed(1)}k`, color:'#FFC107' },
+                  { icon:'cube-outline', label:'Packed', value:staffStats?.packed||0, color:'#F59E0B' },
+                  { icon:'checkmark-circle-outline', label:'Completed', value:staffStats?.collected||0, color:G },
+                  { icon:'cash-outline', label:'Revenue', value:`₹${((staffStats?.revenue||0)/1000).toFixed(1)}k`, color:'#FFC107' },
                 ].map((item, i) => (
                   <View key={i} style={[s.statItemProfile, { borderColor: item.color+'30' }]}>
-                    <Text style={{ fontSize: 22 }}>{item.icon}</Text>
+                    <Ionicons name={item.icon} size={20} color={item.color} />
                     <Text style={[s.statItemValue, { color: item.color }]}>{item.value}</Text>
                     <Text style={s.statItemLabel}>{item.label}</Text>
                   </View>
                 ))}
               </View>
               <TouchableOpacity style={s.refreshStatsBtn} onPress={fetchStaffStats}>
-                <Text style={s.refreshStatsBtnText}>🔄 Refresh Stats</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><Ionicons name="refresh" size={14} color={G} /><Text style={s.refreshStatsBtnText}>Refresh Stats</Text></View>
               </TouchableOpacity>
             </View>
 
             {/* ATTENDANCE */}
             <TouchableOpacity style={s.settingCard} onPress={() => setShowAttendance(true)}>
-              <Text style={s.settingIcon}>📱</Text>
+              <Ionicons name="calendar-outline" size={22} color={G} style={{ width: 28 }} />
               <View style={{ flex: 1 }}>
                 <Text style={s.settingTitle}>Attendance & Salary</Text>
                 <Text style={s.settingSub}>Clock in/out · Monthly report · Salary</Text>
@@ -1875,6 +2098,140 @@ const s = StyleSheet.create({
   newOrderBadge: { backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)' },
   newOrderBadgeText: { color: '#EF4444', fontSize: 11, fontWeight: 'bold' },
   refreshBtn: { backgroundColor: 'rgba(34,197,94,0.1)', borderRadius: 10, padding: 8, borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)' },
+  orderSearchBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#0D1A0D', marginHorizontal: 12, marginTop: 10,
+    marginBottom: 4, borderRadius: 10, paddingHorizontal: 12,
+    paddingVertical: 10, borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.15)',
+  },
+  orderSearchInput: { flex: 1, color: '#fff', fontSize: 13 },
+  // Quick status button on order card
+  quickStatusBtn: {
+    backgroundColor: 'rgba(245,158,11,0.12)', borderRadius: 8,
+    paddingVertical: 8, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)',
+    alignItems: 'center', marginTop: 8,
+  },
+  quickStatusBtnText: { color: '#F59E0B', fontWeight: '700', fontSize: 13 },
+
+  // Vendor styles
+  vendorHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', padding: 14, paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(34,197,94,0.1)',
+  },
+  vendorHeaderTitle: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  addVendorBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(34,197,94,0.1)', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)',
+  },
+  addVendorBtnText: { color: '#22C55E', fontWeight: '700', fontSize: 13 },
+  addVendorForm: {
+    backgroundColor: '#0D1A0D', margin: 12, borderRadius: 14,
+    padding: 14, borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)', gap: 10,
+  },
+  addVendorFormTitle: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  vendorInput: {
+    backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 10,
+    padding: 12, color: '#fff', fontSize: 14,
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)',
+  },
+  saveVendorBtn: {
+    backgroundColor: '#22C55E', borderRadius: 10,
+    padding: 12, alignItems: 'center',
+  },
+  saveVendorBtnText: { color: '#060E06', fontWeight: '800', fontSize: 14 },
+  vendorCard: {
+    backgroundColor: '#0D1A0D', borderRadius: 14,
+    marginBottom: 10, borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.15)', overflow: 'hidden',
+  },
+  vendorCardTop: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 12, padding: 14,
+  },
+  vendorCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  vendorQuickBtns: {
+    flexDirection: 'row', gap: 8, paddingHorizontal: 14,
+    paddingBottom: 12, paddingTop: 0,
+  },
+  vendorQuickBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 5,
+    backgroundColor: 'rgba(34,197,94,0.08)', borderRadius: 8,
+    paddingVertical: 8, borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.25)',
+  },
+  vendorQuickBtnText: { fontSize: 12, fontWeight: '700', color: '#22C55E' },
+  vendorOrderSection: {
+    borderTopWidth: 1, borderTopColor: 'rgba(34,197,94,0.1)',
+    padding: 14, backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  vendorOrderTitle: { fontSize: 13, fontWeight: '700', color: '#fff', marginBottom: 12 },
+  vendorOrderLabel: { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 6, letterSpacing: 0.5 },
+  vendorOrderInput: {
+    backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 10,
+    padding: 12, color: '#fff', fontSize: 13,
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)',
+    minHeight: 90, marginBottom: 12,
+  },
+  vendorOrderBtns: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  vendorSendWaBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 8,
+    backgroundColor: '#25D366', borderRadius: 10, padding: 12,
+  },
+  vendorSendWaBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  vendorCallOrderBtn: {
+    width: 44, backgroundColor: 'rgba(34,197,94,0.1)', borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)',
+  },
+  vendorDeleteFullBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 8,
+  },
+  vendorDeleteFullBtnText: { fontSize: 12, color: 'rgba(239,68,68,0.6)' },
+  vendorAvatar: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: 'rgba(34,197,94,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)',
+  },
+  vendorName: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 2 },
+  vendorParts: { fontSize: 12, color: '#22C55E', marginBottom: 2 },
+  vendorArea: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
+  vendorActions: { flexDirection: 'row', gap: 8 },
+  vendorCallBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(34,197,94,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)',
+  },
+  vendorWaBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(37,211,102,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(37,211,102,0.3)',
+  },
+  orderInventoryBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(34,197,94,0.08)', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 7, marginTop: 10,
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.25)',
+    alignSelf: 'flex-start',
+  },
+  orderInventoryBtnText: { color: '#22C55E', fontSize: 12, fontWeight: '700' },
+  vendorDeleteBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)',
+  },
+
   statsRow: { flexDirection: 'row', padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(34,197,94,0.08)' },
   filterScroll: { maxHeight: 48, borderBottomWidth: 1, borderBottomColor: 'rgba(34,197,94,0.08)' },
   filterRow: { paddingHorizontal: 12, paddingVertical: 8, gap: 8 },
@@ -1974,8 +2331,8 @@ const s = StyleSheet.create({
   statsCardProfile: { backgroundColor: '#0D1A0D', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(34,197,94,0.15)' },
   statsCardTitle: { fontSize: 14, fontWeight: 'bold', color: '#fff', marginBottom: 14 },
   statsGridProfile: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  statItemProfile: { flex: 1, backgroundColor: 'rgba(34,197,94,0.05)', borderRadius: 12, padding: 12, alignItems: 'center', gap: 4, borderWidth: 1 },
-  statItemValue: { fontSize: 20, fontWeight: 'bold', color: G },
+  statItemProfile: { flex: 1, backgroundColor: '#0D1A0D', borderRadius: 10, padding: 10, alignItems: 'center', gap: 3, borderWidth: 1 },
+  statItemValue: { fontSize: 16, fontWeight: '800', color: G },
   statItemLabel: { fontSize: 9, color: 'rgba(255,255,255,0.4)', textAlign: 'center', fontWeight: 'bold', textTransform: 'uppercase' },
   refreshStatsBtn: { backgroundColor: 'rgba(34,197,94,0.08)', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)' },
   refreshStatsBtnText: { color: G, fontSize: 13, fontWeight: 'bold' },

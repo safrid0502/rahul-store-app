@@ -194,7 +194,8 @@ export default function AttendanceScreen({ onBack, staff }) {
   const myId       = myEntry?.id;
   const isOwner    = staff?.role === 'owner';
   const isSenior   = staff?.role === 'senior';
-  const isPrivileged = isOwner || isSenior; // can see/manage all
+  const isPrivileged = isOwner; // only owner can see all
+  const canClockOthers = isOwner; // only owner can clock others in/out
 
   useEffect(() => {
     loadAttendance();
