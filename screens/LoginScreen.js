@@ -1,46 +1,78 @@
 // ════════════════════════════════════════════════════════════════
 // LoginScreen.js — New Rahul Auto Spares Store App
-// Modern staff selection + PIN login
+// Ultra Modern Staff Login — v2
 // ════════════════════════════════════════════════════════════════
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  SafeAreaView, StatusBar, ScrollView, Animated
+  SafeAreaView, StatusBar, Animated, Dimensions
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
+const { width, height } = Dimensions.get('window');
 const API_URL = 'https://rahul-auto-spares-backend.onrender.com';
 
 const STAFF = [
-  { id: 1, name: 'Abdul Azeez Basheer', role: 'owner',  pin: '1111', emoji: '👑', color: '#FFD700' },
-  { id: 2, name: 'Chand Basha',         role: 'senior', pin: '2222', emoji: '⭐', color: '#4F6EF7' },
-  { id: 3, name: 'Mabasha',             role: 'junior', pin: '3333', emoji: '👷', color: '#22C55E' },
-  { id: 4, name: 'Hussain Basha',       role: 'junior', pin: '4444', emoji: '👷', color: '#22C55E' },
-  { id: 5, name: 'Khaja',               role: 'junior', pin: '5555', emoji: '👷', color: '#22C55E' },
+  { id: 1, name: 'Abdul Azeez', role: 'owner',  pin: '1111', color: '#C9A84C', initials: 'AA' },
+  { id: 2, name: 'Chand Basha', role: 'senior', pin: '2222', color: '#4F6EF7', initials: 'CB' },
+  { id: 3, name: 'Mabasha',     role: 'staff',  pin: '3333', color: '#22C55E', initials: 'MB' },
+  { id: 4, name: 'Hussain',     role: 'staff',  pin: '4444', color: '#22C55E', initials: 'HB' },
+  { id: 5, name: 'Khaja',       role: 'staff',  pin: '5555', color: '#22C55E', initials: 'KJ' },
 ];
 
-const ROLE_LABELS = { owner: 'Owner', senior: 'Senior Staff', junior: 'Staff' };
+const ROLE_CONFIG = {
+  owner:  { label: 'Owner',        icon: 'shield-checkmark', color: '#C9A84C' },
+  senior: { label: 'Senior Staff', icon: 'star',             color: '#4F6EF7' },
+  staff:  { label: 'Staff',        icon: 'person',           color: '#22C55E' },
+};
+
+const KEYS = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']];
 
 export default function LoginScreen({ onLogin }) {
-  const [step, setStep]               = useState('select'); // 'select' | 'pin'
+  const [step, setStep]                   = useState('select');
   const [selectedStaff, setSelectedStaff] = useState(null);
-  const [pin, setPin]                 = useState('');
-  const [error, setError]             = useState('');
-  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const [pin, setPin]                     = useState('');
+  const [error, setError]                 = useState('');
+
+  const shakeAnim  = useRef(new Animated.Value(0)).current;
+  const fadeAnim   = useRef(new Animated.Value(0)).current;
+  const slideAnim  = useRef(new Animated.Value(40)).current;
+  const scaleAnim  = useRef(new Animated.Value(0.95)).current;
+  const dotAnims   = [0,1,2,3].map(() => useRef(new Animated.Value(1)).current);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 60, friction: 10, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, tension: 60, friction: 10, useNativeDriver: true }),
+    ]).start();
+  }, [step]);
 
   const shake = () => {
     Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 10,  duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -10, duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 10,  duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0,   duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 12,  duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -12, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 8,   duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -8,  duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0,   duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const animateDot = (index) => {
+    Animated.sequence([
+      Animated.spring(dotAnims[index], { toValue: 1.4, tension: 200, friction: 5, useNativeDriver: true }),
+      Animated.spring(dotAnims[index], { toValue: 1,   tension: 200, friction: 5, useNativeDriver: true }),
     ]).start();
   };
 
   const handleSelectStaff = async (member) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    fadeAnim.setValue(0);
+    slideAnim.setValue(40);
+    scaleAnim.setValue(0.95);
     setSelectedStaff(member);
     setPin('');
     setError('');
@@ -51,28 +83,25 @@ export default function LoginScreen({ onLogin }) {
     if (pin.length >= 4) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newPin = pin + digit;
+    animateDot(newPin.length - 1);
     setPin(newPin);
     setError('');
-    if (newPin.length === 4) {
-      setTimeout(() => checkPin(newPin), 200);
-    }
+    if (newPin.length === 4) setTimeout(() => checkPin(newPin), 300);
   };
 
   const handleDelete = async () => {
+    if (!pin.length) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setPin(p => p.slice(0, -1));
     setError('');
   };
 
   const checkPin = async (entered) => {
-    // Check local PIN first
     if (selectedStaff.pin === entered) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onLogin(selectedStaff);
       return;
     }
-
-    // Check backend PIN
     try {
       const r = await fetch(`${API_URL}/staff/verify-pin`, {
         method: 'POST',
@@ -80,132 +109,190 @@ export default function LoginScreen({ onLogin }) {
         body: JSON.stringify({ pin: entered, staff_id: selectedStaff.id })
       });
       const d = await r.json();
-      if (d.staff) {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        onLogin(d.staff);
-        return;
-      }
+      if (d.staff) { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onLogin(d.staff); return; }
     } catch {}
-
-    // Wrong PIN
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    setError('Wrong PIN! Try again');
+    setError('Incorrect PIN. Try again.');
     shake();
     setTimeout(() => setPin(''), 500);
   };
 
-  // ── STEP 1: SELECT STAFF ──
+  const roleConfig = selectedStaff ? ROLE_CONFIG[selectedStaff.role] : null;
+
+  // ─────────────────────────────────────────
+  // STEP 1: SELECT STAFF
+  // ─────────────────────────────────────────
   if (step === 'select') {
     return (
       <SafeAreaView style={s.container}>
         <StatusBar barStyle="light-content" backgroundColor="#060E06" />
-        <ScrollView contentContainerStyle={s.selectBody}>
 
-          {/* HEADER */}
-          <View style={s.logoBox}>
-            <LinearGradient colors={['#1A2E1A', '#0D1A0D']} style={s.logoRing}>
-              <Text style={s.logoEmoji}>🏪</Text>
-            </LinearGradient>
-            <Text style={s.appLabel}>STAFF LOGIN</Text>
-            <Text style={s.appName}>Rahul Auto Spares</Text>
-            <Text style={s.appSub}>Who are you?</Text>
+        {/* BACKGROUND GRADIENT */}
+        <LinearGradient
+          colors={['#0A1A0A', '#060E06', '#060E06']}
+          style={StyleSheet.absoluteFill} />
+
+        <Animated.View style={[s.selectContainer, {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }, { scale: scaleAnim }]
+        }]}>
+          {/* BRAND HEADER */}
+          <View style={s.brandHeader}>
+            <View style={s.brandLogoBox}>
+              <LinearGradient
+                colors={['#0D1A0D', '#1A2E1A']}
+                style={s.brandLogo}>
+                <Text style={s.brandLogoText}>RAS</Text>
+                <View style={s.brandLogoDot} />
+              </LinearGradient>
+            </View>
+            <Text style={s.brandName}>New Rahul Auto Spares</Text>
+            <Text style={s.brandTagline}>STAFF PORTAL</Text>
           </View>
 
-          {/* STAFF CARDS */}
-          <View style={s.staffGrid}>
-            {STAFF.map(member => (
-              <TouchableOpacity key={member.id}
-                style={s.staffCard}
-                onPress={() => handleSelectStaff(member)}
-                activeOpacity={0.7}>
-                <LinearGradient
-                  colors={['#0D1A0D', '#060E06']}
-                  style={s.staffCardInner}>
-                  <View style={[s.staffAvatar, { borderColor: member.color + '60' }]}>
-                    <Text style={s.staffAvatarEmoji}>{member.emoji}</Text>
-                  </View>
-                  <Text style={s.staffCardName}>
-                    {member.name.split(' ')[0]}
-                  </Text>
-                  <Text style={s.staffCardRole}>
-                    {ROLE_LABELS[member.role]}
-                  </Text>
-                  <View style={[s.staffCardBadge, { backgroundColor: member.color + '20', borderColor: member.color + '40' }]}>
-                    <Text style={[s.staffCardBadgeText, { color: member.color }]}>
-                      {member.emoji} {member.role.toUpperCase()}
-                    </Text>
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))}
+          {/* WHO ARE YOU */}
+          <View style={s.selectSection}>
+            <Text style={s.selectTitle}>SELECT YOUR PROFILE</Text>
+
+            <View style={s.staffGrid}>
+              {STAFF.map(member => {
+                const rc = ROLE_CONFIG[member.role];
+                return (
+                  <TouchableOpacity key={member.id}
+                    style={s.staffCard}
+                    onPress={() => handleSelectStaff(member)}
+                    activeOpacity={0.75}>
+                    <LinearGradient
+                      colors={['#0D1A0D', '#060E06']}
+                      style={s.staffCardGrad}>
+                      {/* Color bar at top */}
+                      <View style={[s.staffCardBar, { backgroundColor: member.color }]} />
+
+                      {/* Avatar */}
+                      <View style={[s.staffCardAvatar, { borderColor: member.color + '50' }]}>
+                        <Text style={[s.staffCardInitials, { color: member.color }]}>
+                          {member.initials}
+                        </Text>
+                      </View>
+
+                      {/* Name */}
+                      <Text style={s.staffCardName}>{member.name}</Text>
+
+                      {/* Role badge */}
+                      <View style={[s.staffRoleBadge, { backgroundColor: member.color + '15' }]}>
+                        <Ionicons name={rc.icon} size={10} color={member.color} />
+                        <Text style={[s.staffRoleText, { color: member.color }]}>
+                          {rc.label}
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
+          {/* FOOTER */}
           <Text style={s.footerText}>
-            New Rahul Auto Spares · Nandyal
+            New Rahul Auto Spares · Nandyal · Staff Only
           </Text>
-        </ScrollView>
+        </Animated.View>
       </SafeAreaView>
     );
   }
 
-  // ── STEP 2: ENTER PIN ──
+  // ─────────────────────────────────────────
+  // STEP 2: PIN ENTRY
+  // ─────────────────────────────────────────
   return (
     <SafeAreaView style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#060E06" />
-      <View style={s.pinBody}>
+      <LinearGradient colors={['#0A1A0A', '#060E06']} style={StyleSheet.absoluteFill} />
 
-        {/* BACK BUTTON */}
+      <Animated.View style={[s.pinContainer, {
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }]
+      }]}>
+
+        {/* BACK */}
         <TouchableOpacity style={s.backBtn}
-          onPress={() => { setStep('select'); setPin(''); setError(''); }}>
-          <Text style={s.backBtnText}>← Change</Text>
+          onPress={() => {
+            fadeAnim.setValue(0);
+            slideAnim.setValue(40);
+            scaleAnim.setValue(0.95);
+            setStep('select');
+            setPin('');
+            setError('');
+          }}>
+          <Ionicons name="arrow-back" size={20} color="rgba(255,255,255,0.5)" />
+          <Text style={s.backBtnText}>Change</Text>
         </TouchableOpacity>
 
-        {/* SELECTED STAFF */}
-        <View style={s.selectedCard}>
+        {/* SELECTED STAFF CARD */}
+        <View style={s.selectedStaffCard}>
           <LinearGradient
-            colors={['#0D1A0D', '#060E06']}
-            style={s.selectedCardInner}>
+            colors={[selectedStaff.color + '20', selectedStaff.color + '08']}
+            style={s.selectedStaffGrad}>
             <View style={[s.selectedAvatar, { borderColor: selectedStaff.color + '60' }]}>
-              <Text style={s.selectedAvatarEmoji}>{selectedStaff.emoji}</Text>
+              <Text style={[s.selectedInitials, { color: selectedStaff.color }]}>
+                {selectedStaff.initials}
+              </Text>
             </View>
-            <Text style={s.selectedName}>{selectedStaff.name}</Text>
-            <Text style={s.selectedRole}>{ROLE_LABELS[selectedStaff.role]}</Text>
+            <View>
+              <Text style={s.selectedName}>{selectedStaff.name}</Text>
+              <View style={s.selectedRoleRow}>
+                <Ionicons name={roleConfig.icon} size={12} color={roleConfig.color} />
+                <Text style={[s.selectedRole, { color: roleConfig.color }]}>
+                  {roleConfig.label}
+                </Text>
+              </View>
+            </View>
           </LinearGradient>
         </View>
 
-        <Text style={s.pinPrompt}>Enter your 4-digit PIN</Text>
+        <Text style={s.pinTitle}>Enter PIN</Text>
+        <Text style={s.pinSubtitle}>Your 4-digit security PIN</Text>
 
         {/* PIN DOTS */}
         <Animated.View style={[s.dotsRow, { transform: [{ translateX: shakeAnim }] }]}>
           {[0,1,2,3].map(i => (
-            <View key={i} style={[s.dot, i < pin.length && {
-              backgroundColor: selectedStaff.color,
-              borderColor: selectedStaff.color
-            }]} />
+            <Animated.View key={i}
+              style={[
+                s.dot,
+                i < pin.length && { backgroundColor: selectedStaff.color, borderColor: selectedStaff.color },
+                { transform: [{ scale: dotAnims[i] }] }
+              ]} />
           ))}
         </Animated.View>
 
+        {/* ERROR or HINT */}
         {error
           ? <Text style={s.errorText}>{error}</Text>
-          : <Text style={s.hintText}>మీ PIN నమోదు చేయండి</Text>
+          : <Text style={s.hintText}>Enter your secure PIN to continue</Text>
         }
 
         {/* KEYPAD */}
         <View style={s.keypad}>
-          {[['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']].map((row, ri) => (
+          {KEYS.map((row, ri) => (
             <View key={ri} style={s.keyRow}>
               {row.map((key, ki) => (
                 <TouchableOpacity key={ki}
-                  style={[s.key, key === '' && s.keyEmpty,
-                    key !== '' && key !== '⌫' && s.keyNum]}
+                  style={[
+                    s.keyBtn,
+                    key === '' && s.keyBtnEmpty,
+                    key === '⌫' && s.keyBtnDelete,
+                  ]}
                   onPress={() => {
                     if (key === '⌫') handleDelete();
                     else if (key) handleKey(key);
                   }}
-                  disabled={key === ''}>
-                  <Text style={[s.keyText, key === '⌫' && { color: '#EF4444', fontSize: 22 }]}>
-                    {key}
-                  </Text>
+                  disabled={key === ''}
+                  activeOpacity={0.7}>
+                  {key === '⌫' ? (
+                    <Ionicons name="backspace-outline" size={22} color="#EF4444" />
+                  ) : key ? (
+                    <Text style={s.keyBtnText}>{key}</Text>
+                  ) : null}
                 </TouchableOpacity>
               ))}
             </View>
@@ -213,7 +300,7 @@ export default function LoginScreen({ onLogin }) {
         </View>
 
         <Text style={s.footerText}>New Rahul Auto Spares · Staff Only</Text>
-      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -222,115 +309,122 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060E06' },
 
   // Select screen
-  selectBody: { padding: 20, alignItems: 'center', paddingBottom: 40 },
-  logoBox: { alignItems: 'center', marginBottom: 28, marginTop: 10 },
-  logoRing: {
-    width: 80, height: 80, borderRadius: 40,
+  selectContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
+
+  // Brand header
+  brandHeader: { alignItems: 'center', paddingVertical: 24 },
+  brandLogoBox: { marginBottom: 14 },
+  brandLogo: {
+    width: 80, height: 80, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 12, borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.3)',
+    borderWidth: 1.5, borderColor: 'rgba(34,197,94,0.3)',
+    position: 'relative',
   },
-  logoEmoji: { fontSize: 36 },
-  appLabel: {
-    fontSize: 10, color: 'rgba(34,197,94,0.5)',
-    letterSpacing: 4, marginBottom: 4,
+  brandLogoText: { fontSize: 22, fontWeight: '900', color: '#22C55E', letterSpacing: 2 },
+  brandLogoDot: {
+    position: 'absolute', bottom: 10, right: 10,
+    width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E',
   },
-  appName: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 4 },
-  appSub: { fontSize: 14, color: 'rgba(255,255,255,0.4)' },
+  brandName: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  brandTagline: {
+    fontSize: 10, color: 'rgba(34,197,94,0.6)',
+    letterSpacing: 4, fontWeight: '700',
+  },
+
+  // Select section
+  selectSection: { flex: 1 },
+  selectTitle: {
+    fontSize: 10, color: 'rgba(255,255,255,0.3)',
+    letterSpacing: 3, fontWeight: '700', marginBottom: 16,
+  },
 
   // Staff grid
-  staffGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    gap: 12, justifyContent: 'center', width: '100%',
+  staffGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  staffCard: { width: '48%', borderRadius: 16, overflow: 'hidden' },
+  staffCardGrad: {
+    borderRadius: 16, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)', overflow: 'hidden',
+    paddingBottom: 16, paddingHorizontal: 14, paddingTop: 0,
+    alignItems: 'center',
   },
-  staffCard: { width: '46%', borderRadius: 18, overflow: 'hidden' },
-  staffCardInner: {
-    padding: 18, alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: 'rgba(34,197,94,0.15)',
-    borderRadius: 18,
-  },
-  staffAvatar: {
-    width: 60, height: 60, borderRadius: 30,
-    backgroundColor: 'rgba(34,197,94,0.08)',
+  staffCardBar: { height: 3, width: '100%', marginBottom: 16 },
+  staffCardAvatar: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 2, marginBottom: 10,
   },
-  staffAvatarEmoji: { fontSize: 28 },
-  staffCardName: {
-    fontSize: 16, fontWeight: 'bold', color: '#fff',
+  staffCardInitials: { fontSize: 20, fontWeight: '900', letterSpacing: 1 },
+  staffCardName: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 8, textAlign: 'center' },
+  staffRoleBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
   },
-  staffCardRole: {
-    fontSize: 11, color: 'rgba(255,255,255,0.4)',
-  },
-  staffCardBadge: {
-    borderRadius: 20, paddingHorizontal: 10,
-    paddingVertical: 4, borderWidth: 1,
-  },
-  staffCardBadgeText: { fontSize: 10, fontWeight: 'bold' },
+  staffRoleText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
 
   // PIN screen
-  pinBody: {
-    flex: 1, alignItems: 'center',
-    justifyContent: 'center', padding: 24,
-  },
+  pinContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   backBtn: {
     position: 'absolute', top: 16, left: 16,
-    backgroundColor: 'rgba(34,197,94,0.1)',
-    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)',
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
-  backBtnText: { color: '#22C55E', fontSize: 14, fontWeight: 'bold' },
+  backBtnText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600' },
 
-  // Selected staff card
-  selectedCard: { marginBottom: 24, borderRadius: 16, overflow: 'hidden', width: '60%' },
-  selectedCardInner: {
-    padding: 16, alignItems: 'center', gap: 6,
-    borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)',
-    borderRadius: 16,
+  // Selected staff
+  selectedStaffCard: { borderRadius: 16, overflow: 'hidden', marginBottom: 32, width: '75%' },
+  selectedStaffGrad: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    padding: 16, borderRadius: 16, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   selectedAvatar: {
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: 'rgba(34,197,94,0.08)',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, marginBottom: 2,
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center', justifyContent: 'center', borderWidth: 2,
   },
-  selectedAvatarEmoji: { fontSize: 26 },
-  selectedName: { fontSize: 15, fontWeight: 'bold', color: '#fff' },
-  selectedRole: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
+  selectedInitials: { fontSize: 18, fontWeight: '900' },
+  selectedName: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  selectedRoleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  selectedRole: { fontSize: 12, fontWeight: '600' },
 
   // PIN
-  pinPrompt: {
-    fontSize: 14, color: 'rgba(255,255,255,0.5)',
-    marginBottom: 20,
-  },
-  dotsRow: { flexDirection: 'row', gap: 18, marginBottom: 10 },
+  pinTitle: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 6 },
+  pinSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.3)', marginBottom: 28 },
+  dotsRow: { flexDirection: 'row', gap: 20, marginBottom: 12 },
   dot: {
-    width: 16, height: 16, borderRadius: 8,
-    backgroundColor: 'rgba(34,197,94,0.1)',
-    borderWidth: 2, borderColor: 'rgba(34,197,94,0.3)',
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.15)',
   },
-  errorText: { fontSize: 13, color: '#EF4444', fontWeight: 'bold', marginBottom: 16 },
-  hintText: { fontSize: 12, color: 'rgba(255,255,255,0.2)', marginBottom: 16 },
+  errorText: { fontSize: 13, color: '#EF4444', fontWeight: '700', marginBottom: 24 },
+  hintText: { fontSize: 12, color: 'rgba(255,255,255,0.2)', marginBottom: 24 },
 
   // Keypad
-  keypad: { width: '100%', gap: 12, marginBottom: 24 },
-  keyRow: { flexDirection: 'row', justifyContent: 'center', gap: 16 },
-  key: {
-    width: 74, height: 74, borderRadius: 37,
-    backgroundColor: '#0D1A0D', alignItems: 'center',
-    justifyContent: 'center', borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.2)',
-  },
-  keyNum: {
+  keypad: { width: '100%', gap: 12, marginBottom: 28 },
+  keyRow: { flexDirection: 'row', justifyContent: 'center', gap: 14 },
+  keyBtn: {
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: '#0D1A0D', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.12)',
     shadowColor: '#22C55E', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 4,
+    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
   },
-  keyEmpty: { backgroundColor: 'transparent', borderColor: 'transparent' },
-  keyText: { fontSize: 26, fontWeight: 'bold', color: '#fff' },
+  keyBtnDelete: {
+    backgroundColor: 'rgba(239,68,68,0.06)',
+    borderColor: 'rgba(239,68,68,0.15)',
+  },
+  keyBtnEmpty: {
+    backgroundColor: 'transparent', borderColor: 'transparent',
+    shadowOpacity: 0,
+  },
+  keyBtnText: { fontSize: 26, fontWeight: '700', color: '#fff' },
 
   // Footer
   footerText: {
-    fontSize: 11, color: 'rgba(255,255,255,0.15)',
-    textAlign: 'center', marginTop: 8,
+    fontSize: 11, color: 'rgba(255,255,255,0.12)',
+    textAlign: 'center', letterSpacing: 0.5,
   },
 });
