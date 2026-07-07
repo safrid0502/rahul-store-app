@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LoginScreen from './screens/LoginScreen';
@@ -44,3 +46,22 @@ export default function App() {
     </>
   );
 }
+const ls = StyleSheet.create({
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  logoBox: {
+    width: 90, height: 90, borderRadius: 22,
+    backgroundColor: '#0D1A0D', borderWidth: 2,
+    borderColor: 'rgba(34,197,94,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#22C55E', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25, shadowRadius: 12, elevation: 10,
+  },
+  logoInner: { alignItems: 'center' },
+  logoText: { fontSize: 24, fontWeight: '900', color: '#22C55E', letterSpacing: 3 },
+  logoDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E', marginTop: 4 },
+  brand: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  sub: { fontSize: 10, color: 'rgba(34,197,94,0.6)', letterSpacing: 4, fontWeight: '700' },
+  dots: { flexDirection: 'row', gap: 6, marginTop: 20 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+});
