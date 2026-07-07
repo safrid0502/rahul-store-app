@@ -525,6 +525,11 @@ export default function MainStore({ staff, onLogout }) {
   const [orderSearch, setOrderSearch] = useState('');
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [showLowStock, setShowLowStock] = useState(false);
+  const [rewards, setRewards] = useState([]);
+  const [showRewardManager, setShowRewardManager] = useState(false);
+  const [newRewardName, setNewRewardName] = useState('');
+  const [newRewardDesc, setNewRewardDesc] = useState('');
+  const [newRewardPoints, setNewRewardPoints] = useState('');
   const [showCustomerHistory, setShowCustomerHistory] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerOrders, setCustomerOrders] = useState([]);
@@ -579,6 +584,7 @@ export default function MainStore({ staff, onLogout }) {
   useEffect(() => {
     if (tab === 'reports') fetchReports();
     fetchLowStock();
+    fetchStoreRewards();
     fetchAllCustomers();
     if (tab === 'stock') fetchProducts();
   }, [tab, period]);
@@ -627,6 +633,45 @@ export default function MainStore({ staff, onLogout }) {
       const r = await fetch(`${API_URL}/orders/customer/${phone}`);
       const d = await r.json();
       setCustomerOrders(d.orders || []);
+    } catch {}
+  };
+
+  const fetchStoreRewards = async () => {
+    try {
+      const r = await fetch(`${API_URL}/rewards`);
+      const d = await r.json();
+      setRewards(d.rewards || []);
+    } catch {}
+  };
+
+  const addReward = async () => {
+    if (!newRewardName || !newRewardPoints) {
+      Alert.alert('Required', 'Name and points are required');
+      return;
+    }
+    try {
+      const r = await fetch(`${API_URL}/rewards`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newRewardName,
+          description: newRewardDesc,
+          points_required: parseInt(newRewardPoints)
+        })
+      });
+      const d = await r.json();
+      if (d.id || d.success) {
+        setNewRewardName(''); setNewRewardDesc(''); setNewRewardPoints('');
+        fetchStoreRewards();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch { Alert.alert('Error', 'Could not add reward'); }
+  };
+
+  const deleteReward = async (id) => {
+    try {
+      await fetch(`${API_URL}/rewards/${id}`, { method: 'DELETE' });
+      fetchStoreRewards();
     } catch {}
   };
 
@@ -1171,7 +1216,76 @@ export default function MainStore({ staff, onLogout }) {
           </View>
         )}
 
-        {/* ══ CUSTOMER HISTORY MODAL ══ */}
+        {/* ══ REWARDS MANAGER MODAL ══ */}
+      <Modal visible={showRewardManager} animationType="slide"
+        onRequestClose={() => setShowRewardManager(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn}
+              onPress={() => setShowRewardManager(false)}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>Rewards Manager</Text>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 14 }}>
+            {/* ADD REWARD FORM */}
+            <View style={s.addRewardForm}>
+              <Text style={s.addRewardFormTitle}>Add New Reward</Text>
+              <TextInput style={s.vendorInput}
+                placeholder="Product name (e.g. Engine Oil 900ml)"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={newRewardName} onChangeText={setNewRewardName} />
+              <TextInput style={s.vendorInput}
+                placeholder="Description (optional)"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={newRewardDesc} onChangeText={setNewRewardDesc} />
+              <TextInput style={s.vendorInput}
+                placeholder="Points required (e.g. 100)"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={newRewardPoints} onChangeText={setNewRewardPoints}
+                keyboardType="numeric" />
+              <TouchableOpacity style={s.saveVendorBtn} onPress={addReward}>
+                <Text style={s.saveVendorBtnText}>Add Reward</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={s.historyTitle}>CURRENT REWARDS</Text>
+
+            {rewards.length === 0 ? (
+              <Text style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 20 }}>
+                No rewards added yet
+              </Text>
+            ) : (
+              rewards.map(reward => (
+                <View key={reward.id} style={s.rewardManagerCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.rewardManagerName}>{reward.name}</Text>
+                    {reward.description ? (
+                      <Text style={s.rewardManagerDesc}>{reward.description}</Text>
+                    ) : null}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                      <Ionicons name="star" size={12} color="#C9A84C" />
+                      <Text style={s.rewardManagerPoints}>{reward.points_required} points required</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity style={s.rewardDeleteBtn}
+                    onPress={() => Alert.alert('Delete?', `Remove "${reward.name}" reward?`, [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => deleteReward(reward.id) }
+                    ])}>
+                    <Ionicons name="trash-outline" size={18} color="rgba(239,68,68,0.7)" />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ CUSTOMER HISTORY MODAL ══ */}
       <Modal visible={showCustomerHistory} animationType="slide"
         onRequestClose={() => setShowCustomerHistory(false)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
@@ -1652,6 +1766,21 @@ export default function MainStore({ staff, onLogout }) {
         {tab === 'reports' && (
           <ScrollView contentContainerStyle={{ padding: 14 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={G} />}>
+
+            {/* REWARDS MANAGER */}
+            {isOwner && (
+              <TouchableOpacity style={s.customerHistoryBtn}
+                onPress={() => setShowRewardManager(true)}>
+                <View style={s.customerHistoryBtnLeft}>
+                  <Ionicons name="gift" size={22} color="#C9A84C" />
+                  <View>
+                    <Text style={[s.customerHistoryBtnTitle, { color: '#C9A84C' }]}>Rewards Manager</Text>
+                    <Text style={s.customerHistoryBtnSub}>Set free products for point redemption</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            )}
 
             {/* CUSTOMER HISTORY BUTTON */}
             <TouchableOpacity style={s.customerHistoryBtn}
@@ -2539,6 +2668,25 @@ const s = StyleSheet.create({
   },
 
   // Customer History
+  addRewardForm: {
+    backgroundColor: '#0D1A0D', borderRadius: 14, padding: 14,
+    marginBottom: 16, borderWidth: 1, borderColor: 'rgba(201,168,76,0.2)', gap: 10,
+  },
+  addRewardFormTitle: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  rewardManagerCard: {
+    backgroundColor: '#0D1A0D', borderRadius: 12, padding: 14,
+    flexDirection: 'row', alignItems: 'center', marginBottom: 8,
+    borderWidth: 1, borderColor: 'rgba(201,168,76,0.15)',
+  },
+  rewardManagerName: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 2 },
+  rewardManagerDesc: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 2 },
+  rewardManagerPoints: { fontSize: 12, color: '#C9A84C', fontWeight: '700' },
+  rewardDeleteBtn: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)',
+  },
   customerHistoryBtn: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#0D1A0D', borderRadius: 14, padding: 16,
