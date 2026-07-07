@@ -523,6 +523,13 @@ export default function MainStore({ staff, onLogout }) {
   const [showSalesDashboard, setShowSalesDashboard] = useState(false);
 
   const [orderSearch, setOrderSearch] = useState('');
+  const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [showLowStock, setShowLowStock] = useState(false);
+  const [showCustomerHistory, setShowCustomerHistory] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [allCustomers, setAllCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
   const [vendors, setVendors] = useState([
     { id: 1, name: 'Hero MotoCorp Dealer', phone: '9000000001', area: 'Nandyal', parts: 'Hero parts', whatsapp: '919000000001' },
     { id: 2, name: 'Honda Parts Supplier', phone: '9000000002', area: 'Kurnool', parts: 'Honda parts', whatsapp: '919000000002' },
@@ -571,6 +578,8 @@ export default function MainStore({ staff, onLogout }) {
 
   useEffect(() => {
     if (tab === 'reports') fetchReports();
+    fetchLowStock();
+    fetchAllCustomers();
     if (tab === 'stock') fetchProducts();
   }, [tab, period]);
 
@@ -605,7 +614,31 @@ export default function MainStore({ staff, onLogout }) {
   };
 
   // ── ORDERS ──
-  const updateStatus = async (orderId, newStatus) => {
+  const fetchAllCustomers = async () => {
+    try {
+      const r = await fetch(`${API_URL}/customers/all`);
+      const d = await r.json();
+      setAllCustomers(d.customers || []);
+    } catch {}
+  };
+
+  const fetchCustomerHistory = async (phone) => {
+    try {
+      const r = await fetch(`${API_URL}/orders/customer/${phone}`);
+      const d = await r.json();
+      setCustomerOrders(d.orders || []);
+    } catch {}
+  };
+
+  const fetchLowStock = async () => {
+    try {
+      const r = await fetch(`${API_URL}/products/low-stock`);
+      const d = await r.json();
+      setLowStockProducts(d.products || []);
+    } catch {}
+  };
+
+  const updateStatus = async (orderId, newStatus, orderData) => {
     try {
       await fetch(`${API_URL}/orders/${orderId}`, {
         method: 'PUT',
@@ -614,6 +647,46 @@ export default function MainStore({ staff, onLogout }) {
       });
       if (newStatus === 'ready') {
         fetch(`${API_URL}/notify/order-ready/${orderId}`, { method: 'POST' }).catch(() => {});
+      }
+      if (newStatus === 'collected' && orderData) {
+        Alert.alert(
+          'Order Collected!',
+          `Send invoice to ${orderData.customer_name}?`,
+          [
+            {
+              text: 'Send WhatsApp Invoice',
+              onPress: () => {
+                const invoiceMsg =
+                  `*PAYMENT RECEIPT*
+` +
+                  `━━━━━━━━━━━━━━━━━━━━
+` +
+                  `New Rahul Auto Spares
+` +
+                  `Telugu Peta, Nandyal
+` +
+                  `━━━━━━━━━━━━━━━━━━━━
+
+` +
+                  `Order: ${orderData.custom_id || `RAS-${orderId}`}
+` +
+                  `Customer: ${orderData.customer_name}
+` +
+                  `Date: ${new Date().toLocaleDateString('en-IN')}
+
+` +
+                  `Amount Paid: ₹${orderData.total_amount}
+
+` +
+                  `Thank you for shopping with us!
+` +
+                  `📞 08514-244944`;
+                Linking.openURL(`https://wa.me/91${orderData.customer_phone}?text=${encodeURIComponent(invoiceMsg)}`);
+              }
+            },
+            { text: 'Skip', style: 'cancel' }
+          ]
+        );
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       fetchOrders();
@@ -1083,7 +1156,7 @@ export default function MainStore({ staff, onLogout }) {
                     )}
                     {item.status === 'ready' && (
                       <TouchableOpacity style={[s.quickStatusBtn, { backgroundColor: 'rgba(107,114,128,0.15)', borderColor: 'rgba(107,114,128,0.4)' }]}
-                        onPress={(e) => { e.stopPropagation(); updateStatus(item.id, 'collected'); }}>
+                        onPress={(e) => { e.stopPropagation(); updateStatus(item.id, 'collected', item); }}>
                         <Text style={[s.quickStatusBtnText, { color: '#9CA3AF' }]}>Mark as Collected</Text>
                       </TouchableOpacity>
                     )}
@@ -1094,7 +1167,132 @@ export default function MainStore({ staff, onLogout }) {
           </View>
         )}
 
-        {/* ══ SCANNER TAB ══ */}
+        {/* ══ CUSTOMER HISTORY MODAL ══ */}
+      <Modal visible={showCustomerHistory} animationType="slide"
+        onRequestClose={() => setShowCustomerHistory(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" backgroundColor="#060E06" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn}
+              onPress={() => { setShowCustomerHistory(false); setSelectedCustomer(null); setCustomerOrders([]); }}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>
+              {selectedCustomer ? selectedCustomer.name : 'Customer History'}
+            </Text>
+          </View>
+
+          {!selectedCustomer ? (
+            /* CUSTOMER LIST */
+            <View style={{ flex: 1 }}>
+              <View style={s.customerSearchBox}>
+                <Ionicons name="search" size={16} color="rgba(255,255,255,0.3)" />
+                <TextInput style={s.customerSearchInput}
+                  placeholder="Search customers..."
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  value={customerSearch}
+                  onChangeText={setCustomerSearch} />
+              </View>
+              <ScrollView contentContainerStyle={{ padding: 14 }}>
+                {allCustomers
+                  .filter(c => !customerSearch ||
+                    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                    c.phone?.includes(customerSearch))
+                  .map((c, i) => (
+                    <TouchableOpacity key={i} style={s.customerRow}
+                      onPress={() => {
+                        setSelectedCustomer(c);
+                        fetchCustomerHistory(c.phone);
+                      }}>
+                      <View style={s.customerAvatar}>
+                        <Text style={s.customerAvatarText}>
+                          {(c.name || '?')[0].toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.customerRowName}>{c.name}</Text>
+                        <Text style={s.customerRowPhone}>+91 {c.phone}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.3)" />
+                    </TouchableOpacity>
+                  ))}
+                <View style={{ height: 40 }} />
+              </ScrollView>
+            </View>
+          ) : (
+            /* CUSTOMER ORDER HISTORY */
+            <ScrollView contentContainerStyle={{ padding: 14 }}>
+              {/* Customer Summary */}
+              <View style={s.customerSummaryCard}>
+                <View style={s.customerSummaryAvatar}>
+                  <Text style={s.customerSummaryAvatarText}>
+                    {(selectedCustomer.name || '?')[0].toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={s.customerSummaryName}>{selectedCustomer.name}</Text>
+                <Text style={s.customerSummaryPhone}>+91 {selectedCustomer.phone}</Text>
+                <View style={s.customerSummaryStats}>
+                  <View style={s.customerSummaryStat}>
+                    <Text style={s.customerSummaryStatValue}>{customerOrders.length}</Text>
+                    <Text style={s.customerSummaryStatLabel}>Orders</Text>
+                  </View>
+                  <View style={s.customerSummaryStat}>
+                    <Text style={s.customerSummaryStatValue}>
+                      ₹{customerOrders.reduce((s,o) => s + (o.total_amount||0), 0).toFixed(0)}
+                    </Text>
+                    <Text style={s.customerSummaryStatLabel}>Total Spent</Text>
+                  </View>
+                  <View style={s.customerSummaryStat}>
+                    <Text style={s.customerSummaryStatValue}>
+                      {customerOrders.filter(o => o.status === 'collected').length}
+                    </Text>
+                    <Text style={s.customerSummaryStatLabel}>Completed</Text>
+                  </View>
+                </View>
+                <TouchableOpacity style={s.customerCallBtn}
+                  onPress={() => Linking.openURL(`https://wa.me/91${selectedCustomer.phone}`)}>
+                  <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                  <Text style={s.customerCallBtnText}>WhatsApp Customer</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={s.historyTitle}>ORDER HISTORY</Text>
+              {customerOrders.length === 0 ? (
+                <Text style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 20 }}>
+                  No orders found
+                </Text>
+              ) : (
+                customerOrders.map(order => (
+                  <View key={order.id} style={s.historyOrderCard}>
+                    <View style={s.historyOrderTop}>
+                      <Text style={s.historyOrderId}>{order.custom_id || `RAS-${order.id}`}</Text>
+                      <Text style={s.historyOrderAmount}>₹{order.total_amount}</Text>
+                    </View>
+                    <View style={s.historyOrderBottom}>
+                      <View style={[s.historyStatusBadge,
+                        { backgroundColor: (STATUS_COLORS[order.status]||G)+'15' }]}>
+                        <Text style={[s.historyStatusText,
+                          { color: STATUS_COLORS[order.status]||G }]}>
+                          {STATUS_LABELS[order.status]||order.status}
+                        </Text>
+                      </View>
+                      <Text style={s.historyOrderDate}>
+                        {new Date(order.created_at).toLocaleDateString('en-IN')}
+                      </Text>
+                    </View>
+                    {order.pickup_time && (
+                      <Text style={s.historyPickup}>Pickup: {order.pickup_time}</Text>
+                    )}
+                  </View>
+                ))
+              )}
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ SCANNER TAB ══ */}
         {tab === 'scanner' && (
           <View style={s.centerBox}>
             <View style={s.scannerBox}>
@@ -1114,6 +1312,64 @@ export default function MainStore({ staff, onLogout }) {
         {/* ══ STOCK TAB ══ */}
         {tab === 'stock' && (
           <View style={{ flex: 1 }}>
+
+            {/* LOW STOCK ALERT BANNER */}
+            {lowStockProducts.length > 0 && (
+              <TouchableOpacity
+                style={s.lowStockBanner}
+                onPress={() => setShowLowStock(!showLowStock)}>
+                <View style={s.lowStockBannerLeft}>
+                  <Ionicons name="warning" size={18} color="#EF4444" />
+                  <Text style={s.lowStockBannerText}>
+                    {lowStockProducts.length} items running low on stock
+                  </Text>
+                </View>
+                <Ionicons
+                  name={showLowStock ? 'chevron-up' : 'chevron-down'}
+                  size={16} color="#EF4444" />
+              </TouchableOpacity>
+            )}
+
+            {/* LOW STOCK LIST */}
+            {showLowStock && lowStockProducts.length > 0 && (
+              <View style={s.lowStockList}>
+                {lowStockProducts.map(p => (
+                  <View key={p.id} style={s.lowStockItem}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.lowStockItemName}>{p.name_en}</Text>
+                      <Text style={s.lowStockItemSku}>{p.sku}</Text>
+                    </View>
+                    <View style={s.lowStockQtyBox}>
+                      <Text style={s.lowStockQty}>{p.stock_qty}</Text>
+                      <Text style={s.lowStockQtyLabel}>left</Text>
+                    </View>
+                    <TouchableOpacity style={s.lowStockOrderBtn}
+                      onPress={() => {
+                        const msg =
+                          `*Low Stock Alert*
+` +
+                          `New Rahul Auto Spares, Nandyal
+
+` +
+                          `Need to reorder:
+` +
+                          `• ${p.name_en}
+` +
+                          `  SKU: ${p.sku}
+` +
+                          `  Current stock: ${p.stock_qty} only
+
+` +
+                          `Please send availability & price.`;
+                        Linking.openURL(`https://wa.me/916300281504?text=${encodeURIComponent(msg)}`);
+                      }}>
+                      <Ionicons name="cart-outline" size={14} color="#F59E0B" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <TouchableOpacity style={s.addProductBanner}
               onPress={() => setShowAddProduct(true)} activeOpacity={0.8}>
               <View style={s.addProductBannerLeft}>
@@ -1386,9 +1642,25 @@ export default function MainStore({ staff, onLogout }) {
           </View>
         )}
 
+        {/* ══ CUSTOMER HISTORY in Reports ══ */}
+        {tab === 'reports' && showCustomerHistory && null}
+
         {tab === 'reports' && (
           <ScrollView contentContainerStyle={{ padding: 14 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={G} />}>
+
+            {/* CUSTOMER HISTORY BUTTON */}
+            <TouchableOpacity style={s.customerHistoryBtn}
+              onPress={() => { fetchAllCustomers(); setShowCustomerHistory(true); }}>
+              <View style={s.customerHistoryBtnLeft}>
+                <Ionicons name="people" size={22} color="#4F6EF7" />
+                <View>
+                  <Text style={s.customerHistoryBtnTitle}>Customer History</Text>
+                  <Text style={s.customerHistoryBtnSub}>View all customer orders</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+            </TouchableOpacity>
 
             <View style={s.periodRow}>
               {[
@@ -2231,6 +2503,108 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)',
   },
+
+  // Low Stock Alert
+  lowStockBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: 'rgba(239,68,68,0.08)', marginHorizontal: 12,
+    marginTop: 10, borderRadius: 10, padding: 12,
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)',
+  },
+  lowStockBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lowStockBannerText: { fontSize: 13, color: '#EF4444', fontWeight: '700' },
+  lowStockList: {
+    backgroundColor: '#0D1A0D', marginHorizontal: 12,
+    borderRadius: 10, marginBottom: 8, borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.15)', overflow: 'hidden',
+  },
+  lowStockItem: {
+    flexDirection: 'row', alignItems: 'center', padding: 12,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)', gap: 10,
+  },
+  lowStockItemName: { fontSize: 13, fontWeight: '600', color: '#fff', marginBottom: 2 },
+  lowStockItemSku: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
+  lowStockQtyBox: { alignItems: 'center', minWidth: 36 },
+  lowStockQty: { fontSize: 18, fontWeight: '800', color: '#EF4444' },
+  lowStockQtyLabel: { fontSize: 9, color: 'rgba(255,255,255,0.3)' },
+  lowStockOrderBtn: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: 'rgba(245,158,11,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)',
+  },
+
+  // Customer History
+  customerHistoryBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#0D1A0D', borderRadius: 14, padding: 16,
+    marginBottom: 14, borderWidth: 1, borderColor: 'rgba(79,110,247,0.2)',
+  },
+  customerHistoryBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
+  customerHistoryBtnTitle: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 2 },
+  customerHistoryBtnSub: { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
+  customerSearchBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#0D1A0D', margin: 14, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.15)',
+  },
+  customerSearchInput: { flex: 1, color: '#fff', fontSize: 14 },
+  customerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#0D1A0D', borderRadius: 12, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  customerAvatar: {
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: 'rgba(34,197,94,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)',
+  },
+  customerAvatarText: { fontSize: 18, fontWeight: 'bold', color: '#22C55E' },
+  customerRowName: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 2 },
+  customerRowPhone: { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
+  customerSummaryCard: {
+    backgroundColor: '#0D1A0D', borderRadius: 16, padding: 20,
+    alignItems: 'center', marginBottom: 16, borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.2)',
+  },
+  customerSummaryAvatar: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: 'rgba(34,197,94,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'rgba(34,197,94,0.4)',
+    marginBottom: 10,
+  },
+  customerSummaryAvatarText: { fontSize: 28, fontWeight: 'bold', color: '#22C55E' },
+  customerSummaryName: { fontSize: 18, fontWeight: '800', color: '#fff', marginBottom: 4 },
+  customerSummaryPhone: { fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 16 },
+  customerSummaryStats: { flexDirection: 'row', gap: 0, width: '100%', marginBottom: 16 },
+  customerSummaryStat: { flex: 1, alignItems: 'center' },
+  customerSummaryStatValue: { fontSize: 20, fontWeight: '800', color: '#22C55E', marginBottom: 2 },
+  customerSummaryStatLabel: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
+  customerCallBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#25D366', borderRadius: 10,
+    paddingHorizontal: 20, paddingVertical: 10,
+  },
+  customerCallBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  historyTitle: {
+    fontSize: 11, color: 'rgba(34,197,94,0.7)',
+    letterSpacing: 2, fontWeight: '700', marginBottom: 10,
+  },
+  historyOrderCard: {
+    backgroundColor: '#0D1A0D', borderRadius: 12, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  historyOrderTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  historyOrderId: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  historyOrderAmount: { fontSize: 15, fontWeight: '800', color: '#FFC107' },
+  historyOrderBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  historyStatusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  historyStatusText: { fontSize: 11, fontWeight: '700' },
+  historyOrderDate: { fontSize: 11, color: 'rgba(255,255,255,0.3)' },
+  historyPickup: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 6 },
 
   statsRow: { flexDirection: 'row', padding: 12, gap: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(34,197,94,0.08)' },
   filterScroll: { maxHeight: 48, borderBottomWidth: 1, borderBottomColor: 'rgba(34,197,94,0.08)' },
