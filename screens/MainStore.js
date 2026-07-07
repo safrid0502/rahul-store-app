@@ -94,9 +94,9 @@ function BottomNav({ active, onChange, newCount }) {
 
 const nb = StyleSheet.create({
   bar: {
-    flexDirection: 'row', backgroundColor: '#0D1A0D',
-    borderTopWidth: 1, borderTopColor: 'rgba(34,197,94,0.15)',
-    paddingBottom: 6, paddingTop: 8,
+    flexDirection: 'row', backgroundColor: '#060E06',
+    borderTopWidth: 1, borderTopColor: 'rgba(34,197,94,0.2)',
+    paddingBottom: 8, paddingTop: 10,
   },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 2 },
   iconWrap: { position: 'relative', marginBottom: 3 },
@@ -1122,12 +1122,16 @@ export default function MainStore({ staff, onLogout }) {
                       </View>
                       <Text style={s.orderAmt}>₹{item.total_amount}</Text>
                     </View>
-                    <Text style={s.orderCustomer}>{item.customer_name || 'Customer'}</Text>
-                    {item.customer_phone && (
-                      <TouchableOpacity onPress={() => Linking.openURL(`tel:${item.customer_phone}`)}>
-                        <Text style={s.orderPhone}>{item.customer_phone}</Text>
-                      </TouchableOpacity>
-                    )}
+                    <View style={s.orderCustomerRow}>
+                      <Text style={s.orderCustomer}>{item.customer_name || 'Customer'}</Text>
+                      {item.customer_phone && (
+                        <TouchableOpacity style={s.orderCallBtn}
+                          onPress={() => Linking.openURL(`tel:${item.customer_phone}`)}>
+                          <Ionicons name="call" size={12} color={G} />
+                          <Text style={s.orderPhone}>{item.customer_phone}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                     {item.pickup_time && (
                       <Text style={s.orderPickup}>Pickup: {item.pickup_time}</Text>
                     )}
@@ -1374,7 +1378,7 @@ export default function MainStore({ staff, onLogout }) {
               onPress={() => setShowAddProduct(true)} activeOpacity={0.8}>
               <View style={s.addProductBannerLeft}>
                 <View style={s.addProductBannerIcon}>
-                  <Ionicons name="add-circle" size={28} color="#22C55E" />
+                  <Ionicons name="add-circle" size={24} color="#22C55E" />
                 </View>
                 <View>
                   <Text style={s.addProductBannerTitle}>Add New Product</Text>
@@ -1866,7 +1870,7 @@ export default function MainStore({ staff, onLogout }) {
               <Text style={s.profileRole}>{staff?.role?.toUpperCase()}</Text>
               <Text style={s.profileId}>Staff ID #{staff?.id}</Text>
               {staff?.phone && (
-                <Text style={s.profilePhone}>📱 +91 {staff.phone}</Text>
+                <Text style={s.profilePhone}>+91 {staff.phone}</Text>
               )}
             </View>
 
@@ -1877,12 +1881,12 @@ export default function MainStore({ staff, onLogout }) {
                 setEditPhone(staff?.phone||'');
                 setShowEditProfile(true);
               }}>
-              <Text style={s.settingIcon}>✏️</Text>
+              <Ionicons name="create-outline" size={22} color={G} style={s.settingIconIon} />
               <View style={{ flex: 1 }}>
                 <Text style={s.settingTitle}>Edit My Profile</Text>
                 <Text style={s.settingSub}>Update name and phone number</Text>
               </View>
-              <Text style={s.settingArrow}>→</Text>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
             </TouchableOpacity>
 
             {/* MY STATS */}
@@ -1913,7 +1917,7 @@ export default function MainStore({ staff, onLogout }) {
                 <Text style={s.settingTitle}>Attendance & Salary</Text>
                 <Text style={s.settingSub}>Clock in/out · Monthly report · Salary</Text>
               </View>
-              <Text style={s.settingArrow}>→</Text>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
             </TouchableOpacity>
 
             {/* PRICE MANAGER */}
@@ -1921,7 +1925,7 @@ export default function MainStore({ staff, onLogout }) {
               <TouchableOpacity
                 style={[s.settingCard, { borderColor: 'rgba(255,193,7,0.3)' }]}
                 onPress={() => { setShowPriceManager(true); if (products.length === 0) fetchProducts(); }}>
-                <Text style={s.settingIcon}>💰</Text>
+                <Ionicons name="pricetag-outline" size={22} color="#FFC107" style={s.settingIconIon} />
                 <View style={{ flex: 1 }}>
                   <Text style={[s.settingTitle, { color: '#FFC107' }]}>Price Manager</Text>
                   <Text style={s.settingSub}>Edit MRP and selling prices</Text>
@@ -1932,7 +1936,7 @@ export default function MainStore({ staff, onLogout }) {
 
             {/* CLOCK */}
             <TouchableOpacity style={[s.clockCard, isClockedIn && s.clockCardIn]} onPress={handleClock}>
-              <Text style={{ fontSize: 28 }}>{isClockedIn ? '⏹' : '▶'}</Text>
+              <Ionicons name={isClockedIn ? 'stop-circle' : 'play-circle'} size={32} color={isClockedIn ? '#EF4444' : G} />
               <View style={{ flex: 1 }}>
                 <Text style={[s.clockTitle, { color: isClockedIn ? '#EF4444' : G }]}>
                   {isClockedIn ? 'Clock Out' : 'Clock In'}
@@ -2624,6 +2628,13 @@ const s = StyleSheet.create({
   newPill: { backgroundColor: 'rgba(79,110,247,0.2)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: 'rgba(79,110,247,0.4)' },
   newPillText: { color: '#4F6EF7', fontSize: 9, fontWeight: 'bold' },
   orderAmt: { fontSize: 20, fontWeight: 'bold', color: '#FFC107' },
+  orderCustomerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  orderCallBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(34,197,94,0.08)', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)',
+  },
   orderCustomer: { fontSize: 13, color: '#fff', fontWeight: '600', marginBottom: 2 },
   orderPhone: { fontSize: 12, color: G, marginBottom: 2 },
   orderPickup: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 8 },
