@@ -523,10 +523,20 @@ export default function MainStore({ staff, onLogout }) {
   const [showSalesDashboard, setShowSalesDashboard] = useState(false);
 
   const [orderSearch, setOrderSearch] = useState('');
+  const [activityLog, setActivityLog] = useState([]);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [activityLog, setActivityLog] = useState([]);
+  const [showActivityLog, setShowActivityLog] = useState(false);
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [showLowStock, setShowLowStock] = useState(false);
   const [rewards, setRewards] = useState([]);
   const [showRewardManager, setShowRewardManager] = useState(false);
+  const [showStaffManager, setShowStaffManager] = useState(false);
+  const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffPhone, setNewStaffPhone] = useState('');
+  const [newStaffRole, setNewStaffRole] = useState('staff');
+  const [newStaffPin, setNewStaffPin] = useState('');
+  const [allStaff, setAllStaff] = useState([]);
   const [newRewardName, setNewRewardName] = useState('');
   const [newRewardDesc, setNewRewardDesc] = useState('');
   const [newRewardPoints, setNewRewardPoints] = useState('');
@@ -585,6 +595,7 @@ export default function MainStore({ staff, onLogout }) {
     if (tab === 'reports') fetchReports();
     fetchLowStock();
     fetchStoreRewards();
+    if (isOwner) fetchAllStaff();
     fetchAllCustomers();
     if (tab === 'stock') fetchProducts();
   }, [tab, period]);
@@ -634,6 +645,92 @@ export default function MainStore({ staff, onLogout }) {
       const d = await r.json();
       setCustomerOrders(d.orders || []);
     } catch {}
+  };
+
+  const fetchActivityLog = async () => {
+    try {
+      const r = await fetch(`${API_URL}/activity-log?limit=100`);
+      const d = await r.json();
+      setActivityLog(d.logs || []);
+    } catch {}
+  };
+
+  const logActivity = async (action, details, orderId = null) => {
+    try {
+      await fetch(`${API_URL}/activity-log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staff_name: staff?.name || 'Unknown',
+          action,
+          details,
+          order_id: orderId
+        })
+      });
+    } catch {}
+  };
+
+  const fetchActivityLog = async () => {
+    try {
+      const r = await fetch(`${API_URL}/activity-log?limit=100`);
+      const d = await r.json();
+      setActivityLog(d.logs || []);
+    } catch {}
+  };
+
+  const logActivity = async (action, details, orderId = null) => {
+    try {
+      await fetch(`${API_URL}/activity-log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staff_name: staff?.name || 'Unknown',
+          action,
+          details,
+          order_id: orderId
+        })
+      });
+    } catch {}
+  };
+
+  const fetchAllStaff = async () => {
+    try {
+      const r = await fetch(`${API_URL}/staff`);
+      const d = await r.json();
+      setAllStaff(d.staff || []);
+    } catch {}
+  };
+
+  const addNewStaff = async () => {
+    if (!newStaffName.trim() || !newStaffPin.trim()) {
+      Alert.alert('Required', 'Name and PIN are required');
+      return;
+    }
+    if (newStaffPin.length !== 4) {
+      Alert.alert('Invalid PIN', 'PIN must be exactly 4 digits');
+      return;
+    }
+    try {
+      const r = await fetch(`${API_URL}/staff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newStaffName.trim(),
+          phone: newStaffPhone.trim(),
+          role: newStaffRole,
+          pin: newStaffPin,
+          salary: 12000,
+        })
+      });
+      const d = await r.json();
+      if (d.id || d.success) {
+        setNewStaffName(''); setNewStaffPhone('');
+        setNewStaffPin(''); setNewStaffRole('staff');
+        fetchAllStaff();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('✅ Staff Added!', `${newStaffName} has been added.\nThey can login with PIN: ${newStaffPin}`);
+      }
+    } catch { Alert.alert('Error', 'Could not add staff'); }
   };
 
   const fetchStoreRewards = async () => {
@@ -690,6 +787,20 @@ export default function MainStore({ staff, onLogout }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
+      // Log activity
+      const statusLabels = { packing: 'Started Packing', ready: 'Marked Ready', collected: 'Marked Collected' };
+      logActivity(
+        statusLabels[newStatus] || `Updated to ${newStatus}`,
+        `Order ${orderData?.custom_id || `RAS-${orderId}`} · Customer: ${orderData?.customer_name || 'Unknown'} · ₹${orderData?.total_amount || 0}`,
+        orderId
+      );
+      // Log activity
+      const statusLabels = { packing: 'Started Packing', ready: 'Marked Ready', collected: 'Marked Collected' };
+      logActivity(
+        statusLabels[newStatus] || `Updated to ${newStatus}`,
+        `Order ${orderData?.custom_id || `RAS-${orderId}`} · Customer: ${orderData?.customer_name || 'Unknown'} · ₹${orderData?.total_amount || 0}`,
+        orderId
+      );
       if (newStatus === 'ready') {
         fetch(`${API_URL}/notify/order-ready/${orderId}`, { method: 'POST' }).catch(() => {});
       }
@@ -1216,7 +1327,225 @@ export default function MainStore({ staff, onLogout }) {
           </View>
         )}
 
-        {/* ══ REWARDS MANAGER MODAL ══ */}
+        {/* ══ STAFF MANAGER MODAL ══ */}
+      <Modal visible={showStaffManager} animationType="slide"
+        onRequestClose={() => setShowStaffManager(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn}
+              onPress={() => setShowStaffManager(false)}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>Staff Manager</Text>
+            <TouchableOpacity onPress={fetchAllStaff}>
+              <Ionicons name="refresh" size={20} color={G} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 14 }}>
+            {/* ADD NEW STAFF */}
+            <View style={s.addRewardForm}>
+              <Text style={s.addRewardFormTitle}>Add New Staff Member</Text>
+
+              <Text style={s.staffInputLabel}>Full Name *</Text>
+              <TextInput style={s.vendorInput}
+                placeholder="e.g. Rahul Kumar"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={newStaffName} onChangeText={setNewStaffName}
+                autoCapitalize="words" />
+
+              <Text style={s.staffInputLabel}>Phone Number</Text>
+              <TextInput style={s.vendorInput}
+                placeholder="10-digit mobile number"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={newStaffPhone} onChangeText={setNewStaffPhone}
+                keyboardType="phone-pad" maxLength={10} />
+
+              <Text style={s.staffInputLabel}>Role</Text>
+              <View style={s.roleSelector}>
+                {['staff', 'senior', 'owner'].map(role => (
+                  <TouchableOpacity key={role}
+                    style={[s.roleBtn, newStaffRole === role && s.roleBtnActive]}
+                    onPress={() => setNewStaffRole(role)}>
+                    <Text style={[s.roleBtnText, newStaffRole === role && s.roleBtnTextActive]}>
+                      {role === 'owner' ? 'Owner' : role === 'senior' ? 'Senior' : 'Staff'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={s.staffInputLabel}>Login PIN (4 digits) *</Text>
+              <TextInput style={s.vendorInput}
+                placeholder="e.g. 6789"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={newStaffPin} onChangeText={setNewStaffPin}
+                keyboardType="numeric" maxLength={4}
+                secureTextEntry />
+
+              <TouchableOpacity style={s.saveVendorBtn} onPress={addNewStaff}>
+                <Text style={s.saveVendorBtnText}>Add Staff Member</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* CURRENT STAFF */}
+            <Text style={s.historyTitle}>CURRENT STAFF ({allStaff.length})</Text>
+            {allStaff.map(member => (
+              <View key={member.id} style={s.staffCard}>
+                <View style={s.staffCardAvatar}>
+                  <Text style={s.staffCardInitials}>
+                    {(member.name || '?').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.staffCardName}>{member.name}</Text>
+                  <View style={s.staffCardRow}>
+                    <View style={[s.staffRolePill, {
+                      backgroundColor: member.role === 'owner' ? 'rgba(201,168,76,0.15)'
+                        : member.role === 'senior' ? 'rgba(79,110,247,0.15)'
+                        : 'rgba(34,197,94,0.15)'
+                    }]}>
+                      <Text style={[s.staffRolePillText, {
+                        color: member.role === 'owner' ? '#C9A84C'
+                          : member.role === 'senior' ? '#4F6EF7' : '#22C55E'
+                      }]}>
+                        {member.role?.toUpperCase()}
+                      </Text>
+                    </View>
+                    {member.phone && (
+                      <Text style={s.staffCardPhone}>+91 {member.phone}</Text>
+                    )}
+                  </View>
+                  <Text style={s.staffCardId}>Staff ID #{member.id}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => Linking.openURL(`tel:${member.phone}`)}>
+                  <Ionicons name="call-outline" size={20} color={G} />
+                </TouchableOpacity>
+              </View>
+            ))}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ ACTIVITY LOG MODAL ══ */}
+      <Modal visible={showActivityLog} animationType="slide"
+        onRequestClose={() => setShowActivityLog(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn}
+              onPress={() => setShowActivityLog(false)}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>Activity Log</Text>
+            <TouchableOpacity onPress={fetchActivityLog}>
+              <Ionicons name="refresh" size={20} color={G} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 14 }}>
+            {activityLog.length === 0 ? (
+              <View style={{ alignItems: 'center', padding: 40 }}>
+                <Ionicons name="list-circle-outline" size={48} color="rgba(255,255,255,0.2)" />
+                <Text style={{ color: 'rgba(255,255,255,0.3)', marginTop: 12, fontSize: 14 }}>
+                  No activity yet
+                </Text>
+              </View>
+            ) : (
+              activityLog.map((log, i) => {
+                const date = new Date(log.created_at);
+                const timeStr = date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+                const dateStr = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+                const isOrder = log.action.includes('Pack') || log.action.includes('Ready') || log.action.includes('Collect');
+                const isClock = log.action.includes('Clock');
+                const iconName = isOrder ? 'receipt-outline' : isClock ? 'time-outline' : 'ellipse-outline';
+                const iconColor = isOrder ? '#22C55E' : isClock ? '#4F6EF7' : 'rgba(255,255,255,0.3)';
+
+                return (
+                  <View key={log.id} style={s.activityRow}>
+                    <View style={[s.activityIconBox, { backgroundColor: iconColor + '15' }]}>
+                      <Ionicons name={iconName} size={16} color={iconColor} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={s.activityTopRow}>
+                        <Text style={s.activityStaff}>{log.staff_name}</Text>
+                        <Text style={s.activityTime}>{timeStr} · {dateStr}</Text>
+                      </View>
+                      <Text style={[s.activityAction, { color: iconColor }]}>{log.action}</Text>
+                      {log.details ? (
+                        <Text style={s.activityDetails}>{log.details}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })
+            )}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ ACTIVITY LOG MODAL ══ */}
+      <Modal visible={showActivityLog} animationType="slide"
+        onRequestClose={() => setShowActivityLog(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn}
+              onPress={() => setShowActivityLog(false)}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>Activity Log</Text>
+            <TouchableOpacity onPress={fetchActivityLog}>
+              <Ionicons name="refresh" size={20} color={G} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 14 }}>
+            {activityLog.length === 0 ? (
+              <View style={{ alignItems: 'center', padding: 40 }}>
+                <Ionicons name="list-circle-outline" size={48} color="rgba(255,255,255,0.2)" />
+                <Text style={{ color: 'rgba(255,255,255,0.3)', marginTop: 12, fontSize: 14 }}>
+                  No activity yet
+                </Text>
+              </View>
+            ) : (
+              activityLog.map((log, i) => {
+                const date = new Date(log.created_at);
+                const timeStr = date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+                const dateStr = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+                const isOrder = log.action.includes('Pack') || log.action.includes('Ready') || log.action.includes('Collect');
+                const isClock = log.action.includes('Clock');
+                const iconName = isOrder ? 'receipt-outline' : isClock ? 'time-outline' : 'ellipse-outline';
+                const iconColor = isOrder ? '#22C55E' : isClock ? '#4F6EF7' : 'rgba(255,255,255,0.3)';
+
+                return (
+                  <View key={log.id} style={s.activityRow}>
+                    <View style={[s.activityIconBox, { backgroundColor: iconColor + '15' }]}>
+                      <Ionicons name={iconName} size={16} color={iconColor} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={s.activityTopRow}>
+                        <Text style={s.activityStaff}>{log.staff_name}</Text>
+                        <Text style={s.activityTime}>{timeStr} · {dateStr}</Text>
+                      </View>
+                      <Text style={[s.activityAction, { color: iconColor }]}>{log.action}</Text>
+                      {log.details ? (
+                        <Text style={s.activityDetails}>{log.details}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                );
+              })
+            )}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ REWARDS MANAGER MODAL ══ */}
       <Modal visible={showRewardManager} animationType="slide"
         onRequestClose={() => setShowRewardManager(false)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
@@ -1766,6 +2095,51 @@ export default function MainStore({ staff, onLogout }) {
         {tab === 'reports' && (
           <ScrollView contentContainerStyle={{ padding: 14 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={G} />}>
+
+            {/* STAFF MANAGER */}
+            {isOwner && (
+              <TouchableOpacity style={s.customerHistoryBtn}
+                onPress={() => { fetchAllStaff(); setShowStaffManager(true); }}>
+                <View style={s.customerHistoryBtnLeft}>
+                  <Ionicons name="people-circle" size={22} color="#22C55E" />
+                  <View>
+                    <Text style={s.customerHistoryBtnTitle}>Staff Manager</Text>
+                    <Text style={s.customerHistoryBtnSub}>Add, view and manage staff profiles</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            )}
+
+            {/* ACTIVITY LOG */}
+            {isOwner && (
+              <TouchableOpacity style={s.customerHistoryBtn}
+                onPress={() => { fetchActivityLog(); setShowActivityLog(true); }}>
+                <View style={s.customerHistoryBtnLeft}>
+                  <Ionicons name="list-circle" size={22} color="#4F6EF7" />
+                  <View>
+                    <Text style={s.customerHistoryBtnTitle}>Activity Log</Text>
+                    <Text style={s.customerHistoryBtnSub}>See all staff actions in real-time</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            )}
+
+            {/* ACTIVITY LOG */}
+            {isOwner && (
+              <TouchableOpacity style={s.customerHistoryBtn}
+                onPress={() => { fetchActivityLog(); setShowActivityLog(true); }}>
+                <View style={s.customerHistoryBtnLeft}>
+                  <Ionicons name="list-circle" size={22} color="#4F6EF7" />
+                  <View>
+                    <Text style={s.customerHistoryBtnTitle}>Activity Log</Text>
+                    <Text style={s.customerHistoryBtnSub}>See all staff actions in real-time</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            )}
 
             {/* REWARDS MANAGER */}
             {isOwner && (
@@ -2668,6 +3042,71 @@ const s = StyleSheet.create({
   },
 
   // Customer History
+  // Activity Log
+  // Staff Manager
+  staffInputLabel: {
+    fontSize: 11, color: 'rgba(255,255,255,0.4)',
+    marginBottom: 6, marginTop: 8, letterSpacing: 0.5,
+  },
+  roleSelector: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  roleBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)',
+    alignItems: 'center', backgroundColor: 'rgba(34,197,94,0.05)',
+  },
+  roleBtnActive: { backgroundColor: '#22C55E', borderColor: '#22C55E' },
+  roleBtnText: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.4)' },
+  roleBtnTextActive: { color: '#060E06' },
+  staffCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#0D1A0D', borderRadius: 14, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: 'rgba(34,197,94,0.12)',
+  },
+  staffCardAvatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(34,197,94,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)',
+  },
+  staffCardInitials: { fontSize: 16, fontWeight: '900', color: '#22C55E' },
+  staffCardName: { fontSize: 14, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  staffCardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  staffRolePill: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  staffRolePillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  staffCardPhone: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
+  staffCardId: { fontSize: 11, color: 'rgba(255,255,255,0.3)' },
+
+  activityRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    paddingVertical: 12, borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  activityIconBox: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center', marginTop: 2,
+  },
+  activityTopRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
+  activityStaff: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  activityTime: { fontSize: 11, color: 'rgba(255,255,255,0.3)' },
+  activityAction: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  activityDetails: { fontSize: 12, color: 'rgba(255,255,255,0.4)', lineHeight: 16 },
+
+  // Activity Log
+  activityRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    paddingVertical: 12, borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  activityIconBox: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center', marginTop: 2,
+  },
+  activityTopRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
+  activityStaff: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  activityTime: { fontSize: 11, color: 'rgba(255,255,255,0.3)' },
+  activityAction: { fontSize: 13, fontWeight: '600', marginBottom: 2 },
+  activityDetails: { fontSize: 12, color: 'rgba(255,255,255,0.4)', lineHeight: 16 },
+
   addRewardForm: {
     backgroundColor: '#0D1A0D', borderRadius: 14, padding: 14,
     marginBottom: 16, borderWidth: 1, borderColor: 'rgba(201,168,76,0.2)', gap: 10,

@@ -11,17 +11,27 @@ import {
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 const API_URL = 'https://rahul-auto-spares-backend.onrender.com';
 
-const STAFF = [
+// Default staff - used as fallback if backend is down
+const DEFAULT_STAFF = [
   { id: 1, name: 'Abdul Azeez', role: 'owner',  pin: '1111', color: '#C9A84C', initials: 'AA' },
   { id: 2, name: 'Chand Basha', role: 'senior', pin: '2222', color: '#4F6EF7', initials: 'CB' },
   { id: 3, name: 'Mabasha',     role: 'staff',  pin: '3333', color: '#22C55E', initials: 'MB' },
   { id: 4, name: 'Hussain',     role: 'staff',  pin: '4444', color: '#22C55E', initials: 'HB' },
   { id: 5, name: 'Khaja',       role: 'staff',  pin: '5555', color: '#22C55E', initials: 'KJ' },
 ];
+
+const ROLE_COLORS = { owner: '#C9A84C', senior: '#4F6EF7', staff: '#22C55E' };
+
+const getInitials = (name) => {
+  const parts = name.trim().split(' ');
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.substring(0, 2).toUpperCase();
+};
 
 const ROLE_CONFIG = {
   owner:  { label: 'Owner',        icon: 'shield-checkmark', color: '#C9A84C' },
@@ -33,6 +43,8 @@ const KEYS = [['1','2','3'],['4','5','6'],['7','8','9'],['','0','⌫']];
 
 export default function LoginScreen({ onLogin }) {
   const [step, setStep]                   = useState('select');
+  const [staffList, setStaffList]         = useState(DEFAULT_STAFF);
+  const [loadingStaff, setLoadingStaff]   = useState(true);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [pin, setPin]                     = useState('');
   const [error, setError]                 = useState('');
@@ -42,6 +54,38 @@ export default function LoginScreen({ onLogin }) {
   const slideAnim  = useRef(new Animated.Value(40)).current;
   const scaleAnim  = useRef(new Animated.Value(0.95)).current;
   const dotAnims   = [0,1,2,3].map(() => useRef(new Animated.Value(1)).current);
+
+  useEffect(() => {
+    loadStaff();
+  }, []);
+
+  const loadStaff = async () => {
+    try {
+      // Try cached first
+      const cached = await AsyncStorage.getItem('staff_list_cache');
+      if (cached) setStaffList(JSON.parse(cached));
+      // Then fetch fresh from backend
+      const r = await fetch(`${API_URL}/staff`);
+      const d = await r.json();
+      if (d.staff && d.staff.length > 0) {
+        const mapped = d.staff.map(s => ({
+          id: s.id,
+          name: s.name,
+          role: s.role || 'staff',
+          pin: s.pin || '0000',
+          color: ROLE_COLORS[s.role] || '#22C55E',
+          initials: getInitials(s.name),
+          phone: s.phone,
+        }));
+        setStaffList(mapped);
+        await AsyncStorage.setItem('staff_list_cache', JSON.stringify(mapped));
+      }
+    } catch {
+      // Use default if backend fails
+      setStaffList(DEFAULT_STAFF);
+    }
+    setLoadingStaff(false);
+  };
 
   useEffect(() => {
     Animated.parallel([
@@ -154,8 +198,13 @@ export default function LoginScreen({ onLogin }) {
           <View style={s.selectSection}>
             <Text style={s.selectTitle}>SELECT YOUR PROFILE</Text>
 
-            <View style={s.staffGrid}>
-              {STAFF.map(member => {
+            {loadingStaff ? (
+            <View style={{ alignItems: 'center', padding: 20 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading staff...</Text>
+            </View>
+          ) : null}
+          <View style={s.staffGrid}>
+              {staffList.map(member => {
                 const rc = ROLE_CONFIG[member.role];
                 return (
                   <TouchableOpacity key={member.id}
