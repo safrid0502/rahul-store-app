@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "New Rahul Auto Spares",
+    "name": "RAS Store",
     "slug": "rahul-auto-spares",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,7 +15,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#07111F"
       },
-      "package": "com.rahulautospares.app"
+      "package": "com.rahulautospares.store"
     },
     "extra": {
       "eas": {

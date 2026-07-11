@@ -525,8 +525,6 @@ export default function MainStore({ staff, onLogout }) {
   const [orderSearch, setOrderSearch] = useState('');
   const [activityLog, setActivityLog] = useState([]);
   const [showActivityLog, setShowActivityLog] = useState(false);
-  const [activityLog, setActivityLog] = useState([]);
-  const [showActivityLog, setShowActivityLog] = useState(false);
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [showLowStock, setShowLowStock] = useState(false);
   const [rewards, setRewards] = useState([]);
