@@ -8,12 +8,12 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#07111F"
+      "backgroundColor": "#060E06"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#07111F"
+        "backgroundColor": "#060E06"
       },
       "package": "com.rahulautospares.store"
     },

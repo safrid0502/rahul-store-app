@@ -668,29 +668,8 @@ export default function MainStore({ staff, onLogout }) {
     } catch {}
   };
 
-  const fetchActivityLog = async () => {
-    try {
-      const r = await fetch(`${API_URL}/activity-log?limit=100`);
-      const d = await r.json();
-      setActivityLog(d.logs || []);
-    } catch {}
-  };
-
-  const logActivity = async (action, details, orderId = null) => {
-    try {
-      await fetch(`${API_URL}/activity-log`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staff_name: staff?.name || 'Unknown',
-          action,
-          details,
-          order_id: orderId
-        })
-      });
-    } catch {}
-  };
-
+  
+  
   const fetchAllStaff = async () => {
     try {
       const r = await fetch(`${API_URL}/staff`);
@@ -785,13 +764,6 @@ export default function MainStore({ staff, onLogout }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
-      // Log activity
-      const statusLabels = { packing: 'Started Packing', ready: 'Marked Ready', collected: 'Marked Collected' };
-      logActivity(
-        statusLabels[newStatus] || `Updated to ${newStatus}`,
-        `Order ${orderData?.custom_id || `RAS-${orderId}`} · Customer: ${orderData?.customer_name || 'Unknown'} · ₹${orderData?.total_amount || 0}`,
-        orderId
-      );
       // Log activity
       const statusLabels = { packing: 'Started Packing', ready: 'Marked Ready', collected: 'Marked Collected' };
       logActivity(
