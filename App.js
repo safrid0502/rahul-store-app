@@ -15,7 +15,34 @@ export default function App() {
   const checkLogin = async () => {
     try {
       const saved = await AsyncStorage.getItem('staff_profile');
-      if (saved) setStaff(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Verify staff still valid - don't block if backend down
+        try {
+          const r = await fetch(
+            'https://rahul-auto-spares-backend.onrender.com/staff/' + parsed.id,
+            { signal: AbortSignal.timeout(3000) }
+          );
+          if (r.ok) {
+            const d = await r.json();
+            if (d.staff) {
+              // Update with latest data from backend
+              const updated = { ...parsed, ...d.staff };
+              await AsyncStorage.setItem('staff_profile', JSON.stringify(updated));
+              setStaff(updated);
+            } else {
+              // Staff no longer exists
+              await AsyncStorage.removeItem('staff_profile');
+            }
+          } else {
+            // Backend error - use cached
+            setStaff(parsed);
+          }
+        } catch {
+          // Network error - use cached profile
+          setStaff(parsed);
+        }
+      }
     } catch {}
     setLoading(false);
   };
@@ -28,7 +55,9 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('staff_profile');
+    try {
+      await AsyncStorage.multiRemove(['staff_profile', 'staff_list_cache']);
+    } catch {}
     setStaff(null);
   };
 
