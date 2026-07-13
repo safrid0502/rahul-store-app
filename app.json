@@ -15,13 +15,25 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#060E06"
       },
-      "package": "com.rahulautospares.store"
+      "package": "com.rahulautospares.store",
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "VIBRATE",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "extra": {
       "eas": {
         "projectId": "02693dd5-74df-488e-ba61-7a16ab7b8965"
       }
     },
-    "icon": "./assets/icon.png"
+    "icon": "./assets/icon.png",
+    "plugins": [
+      "expo-notifications",
+      "expo-image-picker"
+    ]
   }
 }

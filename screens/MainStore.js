@@ -523,6 +523,14 @@ export default function MainStore({ staff, onLogout }) {
   const [showSalesDashboard, setShowSalesDashboard] = useState(false);
 
   const [orderSearch, setOrderSearch] = useState('');
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [showCashRegister, setShowCashRegister] = useState(false);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [cashItems, setCashItems] = useState([]);
+  const [cashCustomerName, setCashCustomerName] = useState('');
+  const [cashCustomerPhone, setCashCustomerPhone] = useState('');
+  const [todayRevenue, setTodayRevenue] = useState(0);
+  const [todayOrders, setTodayOrders] = useState(0);
   const [activityLog, setActivityLog] = useState([]);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [lowStockProducts, setLowStockProducts] = useState([]);
@@ -593,6 +601,7 @@ export default function MainStore({ staff, onLogout }) {
     if (tab === 'reports') fetchReports();
     fetchLowStock();
     fetchStoreRewards();
+    fetchDashboard();
     if (isOwner) fetchAllStaff();
     fetchAllCustomers();
     if (tab === 'stock') fetchProducts();
@@ -708,6 +717,88 @@ export default function MainStore({ staff, onLogout }) {
         Alert.alert('✅ Staff Added!', `${newStaffName} has been added.\nThey can login with PIN: ${newStaffPin}`);
       }
     } catch { Alert.alert('Error', 'Could not add staff'); }
+  };
+
+  const fetchDashboard = async () => {
+    try {
+      const r = await fetch(`${API_URL}/reports/daily`);
+      const d = await r.json();
+      setDashboardData(d);
+      setTodayRevenue(d.revenue || 0);
+      setTodayOrders(d.total_orders || 0);
+    } catch {}
+  };
+
+  const sendDailyReport = async () => {
+    try {
+      const r = await fetch(`${API_URL}/reports/daily`);
+      const d = await r.json();
+      const msg =
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `*DAILY REPORT*\n` +
+        `New Rahul Auto Spares\n` +
+        `${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `Orders Today: ${d.total_orders || 0}\n` +
+        `Revenue: ₹${(d.revenue || 0).toFixed(0)}\n` +
+        `Cash: ₹${(d.cash || 0).toFixed(0)}\n` +
+        `UPI: ₹${(d.upi || 0).toFixed(0)}\n\n` +
+        `Pending Orders: ${orders.filter(o => o.status !== 'collected').length}\n` +
+        `Low Stock Items: ${lowStockProducts.length}\n` +
+        `━━━━━━━━━━━━━━━━━━━━`;
+      Linking.openURL(`https://wa.me/919642536653?text=${encodeURIComponent(msg)}`);
+    } catch { Alert.alert('Error', 'Could not generate report'); }
+  };
+
+  const addCashItem = (product) => {
+    const existing = cashItems.find(i => i.id === product.id);
+    if (existing) {
+      setCashItems(items => items.map(i => i.id === product.id ? {...i, qty: i.qty + 1} : i));
+    } else {
+      setCashItems(items => [...items, {...product, qty: 1}]);
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const placeCashOrder = async () => {
+    if (cashItems.length === 0) { Alert.alert('Error', 'Add items first'); return; }
+    const total = cashItems.reduce((s, i) => s + i.selling_price * i.qty, 0);
+    try {
+      const r = await fetch(`${API_URL}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_name: cashCustomerName || 'Walk-in Customer',
+          customer_phone: cashCustomerPhone || '0000000000',
+          total_amount: total,
+          pickup_time: 'Now',
+          payment_type: 'cash',
+          status: 'collected',
+          items: cashItems.map(i => ({
+            name_en: i.name_en, sku: i.sku,
+            quantity: i.qty, unit_price: i.selling_price
+          }))
+        })
+      });
+      const d = await r.json();
+      const orderId = d.custom_id || `RAS-${d.id}`;
+      // Send WhatsApp receipt
+      if (cashCustomerPhone) {
+        const receipt =
+          `*RECEIPT - ${orderId}*\n` +
+          `New Rahul Auto Spares, Nandyal\n\n` +
+          cashItems.map(i => `${i.name_en} x${i.qty} = ₹${(i.selling_price * i.qty).toFixed(0)}`).join('\n') +
+          `\n\nTotal: ₹${total.toFixed(0)}\n` +
+          `Payment: Cash\nThank you!`;
+        Linking.openURL(`https://wa.me/91${cashCustomerPhone}?text=${encodeURIComponent(receipt)}`);
+      }
+      setCashItems([]);
+      setCashCustomerName('');
+      setCashCustomerPhone('');
+      setShowCashRegister(false);
+      fetchOrders();
+      Alert.alert('Done!', `Order ${orderId} created\nTotal: ₹${total.toFixed(0)}`);
+    } catch { Alert.alert('Error', 'Could not create order'); }
   };
 
   const fetchStoreRewards = async () => {
@@ -1174,6 +1265,46 @@ export default function MainStore({ staff, onLogout }) {
         {/* ══ ORDERS TAB ══ */}
         {tab === 'orders' && (
           <View style={{ flex: 1 }}>
+
+            {/* OWNER DASHBOARD BANNER */}
+            {isOwner && (
+              <View style={s.dashBanner}>
+                <TouchableOpacity style={s.dashCard} onPress={() => setShowDashboard(true)}>
+                  <View style={s.dashItem}>
+                    <Text style={s.dashValue}>₹{(todayRevenue/1000).toFixed(1)}k</Text>
+                    <Text style={s.dashLabel}>Today</Text>
+                  </View>
+                  <View style={s.dashDivider}/>
+                  <View style={s.dashItem}>
+                    <Text style={s.dashValue}>{todayOrders}</Text>
+                    <Text style={s.dashLabel}>Orders</Text>
+                  </View>
+                  <View style={s.dashDivider}/>
+                  <View style={s.dashItem}>
+                    <Text style={[s.dashValue, { color: '#EF4444' }]}>{lowStockProducts.length}</Text>
+                    <Text style={s.dashLabel}>Low Stock</Text>
+                  </View>
+                  <View style={s.dashDivider}/>
+                  <View style={s.dashItem}>
+                    <Text style={[s.dashValue, { color: '#F59E0B' }]}>
+                      {orders.filter(o => o.status !== 'collected').length}
+                    </Text>
+                    <Text style={s.dashLabel}>Pending</Text>
+                  </View>
+                </TouchableOpacity>
+                <View style={s.dashActions}>
+                  <TouchableOpacity style={s.cashRegBtn} onPress={() => setShowCashRegister(true)}>
+                    <Ionicons name="cash-outline" size={16} color="#22C55E" />
+                    <Text style={s.cashRegBtnText}>Cash Sale</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.reportBtn} onPress={sendDailyReport}>
+                    <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
+                    <Text style={s.reportBtnText}>Report</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             {/* ORDER SEARCH */}
             <View style={s.orderSearchBox}>
               <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.3)" />
@@ -1297,7 +1428,87 @@ export default function MainStore({ staff, onLogout }) {
           </View>
         )}
 
-        {/* ══ STAFF MANAGER MODAL ══ */}
+        {/* ══ CASH REGISTER MODAL ══ */}
+      <Modal visible={showCashRegister} animationType="slide"
+        onRequestClose={() => setShowCashRegister(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn} onPress={() => setShowCashRegister(false)}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>Cash Register</Text>
+            <Text style={s.cashTotal}>
+              ₹{cashItems.reduce((s,i) => s + i.selling_price * i.qty, 0).toFixed(0)}
+            </Text>
+          </View>
+
+          {/* Customer details */}
+          <View style={s.cashCustomerRow}>
+            <TextInput style={[s.vendorInput, { flex: 1 }]}
+              placeholder="Customer name (optional)"
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              value={cashCustomerName} onChangeText={setCashCustomerName} />
+            <TextInput style={[s.vendorInput, { flex: 1 }]}
+              placeholder="Phone (optional)"
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              value={cashCustomerPhone} onChangeText={setCashCustomerPhone}
+              keyboardType="phone-pad" maxLength={10} />
+          </View>
+
+          {/* Cart items */}
+          {cashItems.length > 0 && (
+            <View style={s.cashCartSection}>
+              <Text style={s.historyTitle}>ITEMS IN BILL</Text>
+              {cashItems.map((item, i) => (
+                <View key={i} style={s.cashCartItem}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.cashCartItemName}>{item.name_en}</Text>
+                    <Text style={s.cashCartItemPrice}>₹{item.selling_price} each</Text>
+                  </View>
+                  <TouchableOpacity onPress={() =>
+                    setCashItems(items => items.map(x =>
+                      x.id === item.id ? {...x, qty: x.qty - 1} : x
+                    ).filter(x => x.qty > 0))}>
+                    <Ionicons name="remove-circle-outline" size={22} color="#EF4444" />
+                  </TouchableOpacity>
+                  <Text style={s.cashQty}>{item.qty}</Text>
+                  <TouchableOpacity onPress={() => addCashItem(item)}>
+                    <Ionicons name="add-circle-outline" size={22} color={G} />
+                  </TouchableOpacity>
+                  <Text style={s.cashItemTotal}>₹{(item.selling_price * item.qty).toFixed(0)}</Text>
+                </View>
+              ))}
+              <TouchableOpacity style={s.saveCashBtn} onPress={placeCashOrder}>
+                <Ionicons name="checkmark-circle" size={20} color="#060E06" />
+                <Text style={s.saveCashBtnText}>Complete Sale</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Product search and list */}
+          <Text style={[s.historyTitle, { paddingHorizontal: 14, marginTop: 8 }]}>ADD PRODUCTS</Text>
+          <FlatList
+            data={products}
+            keyExtractor={i => i.id.toString()}
+            contentContainerStyle={{ padding: 12 }}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={s.cashProductRow} onPress={() => addCashItem(item)}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.cashProductName}>{item.name_en}</Text>
+                  <Text style={s.cashProductSku}>{item.sku}</Text>
+                </View>
+                <Text style={s.cashProductPrice}>₹{item.selling_price}</Text>
+                <TouchableOpacity style={s.cashAddBtn} onPress={() => addCashItem(item)}>
+                  <Ionicons name="add" size={18} color="#060E06" />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            )}
+          />
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ STAFF MANAGER MODAL ══ */}
       <Modal visible={showStaffManager} animationType="slide"
         onRequestClose={() => setShowStaffManager(false)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
@@ -2847,6 +3058,36 @@ const s = StyleSheet.create({
   newOrderBadge: { backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)' },
   newOrderBadgeText: { color: '#EF4444', fontSize: 11, fontWeight: 'bold' },
   refreshBtn: { backgroundColor: 'rgba(34,197,94,0.1)', borderRadius: 10, padding: 8, borderWidth: 1, borderColor: 'rgba(34,197,94,0.2)' },
+  // Dashboard
+  dashBanner: { backgroundColor: '#0D1A0D', borderBottomWidth: 1, borderBottomColor: 'rgba(34,197,94,0.1)', padding: 12 },
+  dashCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(34,197,94,0.05)', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(34,197,94,0.15)' },
+  dashItem: { flex: 1, alignItems: 'center' },
+  dashValue: { fontSize: 20, fontWeight: '900', color: '#22C55E', marginBottom: 2 },
+  dashLabel: { fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: '600' },
+  dashDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.06)' },
+  dashActions: { flexDirection: 'row', gap: 8 },
+  cashRegBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(34,197,94,0.1)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: 'rgba(34,197,94,0.3)' },
+  cashRegBtnText: { color: '#22C55E', fontWeight: '700', fontSize: 13 },
+  reportBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(37,211,102,0.1)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: 'rgba(37,211,102,0.3)' },
+  reportBtnText: { color: '#25D366', fontWeight: '700', fontSize: 13 },
+
+  // Cash Register
+  cashTotal: { fontSize: 18, fontWeight: '900', color: '#22C55E' },
+  cashCustomerRow: { flexDirection: 'row', gap: 8, padding: 12, paddingBottom: 0 },
+  cashCartSection: { padding: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  cashCartItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
+  cashCartItemName: { fontSize: 13, fontWeight: '600', color: '#fff', marginBottom: 2 },
+  cashCartItemPrice: { fontSize: 11, color: 'rgba(255,255,255,0.4)' },
+  cashQty: { fontSize: 16, fontWeight: '700', color: '#fff', minWidth: 24, textAlign: 'center' },
+  cashItemTotal: { fontSize: 14, fontWeight: '700', color: '#22C55E', minWidth: 60, textAlign: 'right' },
+  saveCashBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#22C55E', borderRadius: 12, padding: 14, marginTop: 12 },
+  saveCashBtnText: { color: '#060E06', fontWeight: '800', fontSize: 15 },
+  cashProductRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#0D1A0D', borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
+  cashProductName: { fontSize: 13, fontWeight: '600', color: '#fff', marginBottom: 2 },
+  cashProductSku: { fontSize: 10, color: 'rgba(255,255,255,0.3)' },
+  cashProductPrice: { fontSize: 14, fontWeight: '700', color: '#22C55E' },
+  cashAddBtn: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#22C55E', alignItems: 'center', justifyContent: 'center' },
+
   orderSearchBox: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#0D1A0D', marginHorizontal: 12, marginTop: 10,
