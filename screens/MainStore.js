@@ -524,6 +524,19 @@ export default function MainStore({ staff, onLogout }) {
 
   const [orderSearch, setOrderSearch] = useState('');
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showStockAdjust, setShowStockAdjust] = useState(false);
+  const [showBulkMessage, setShowBulkMessage] = useState(false);
+  const [showProfitReport, setShowProfitReport] = useState(false);
+  const [showEndOfDay, setShowEndOfDay] = useState(false);
+  const [showBlacklist, setShowBlacklist] = useState(false);
+  const [blacklist, setBlacklist] = useState([]);
+  const [blacklistName, setBlacklistName] = useState('');
+  const [blacklistPhone, setBlacklistPhone] = useState('');
+  const [blacklistReason, setBlacklistReason] = useState('');
+  const [bulkMessage, setBulkMessage] = useState('');
+  const [stockAdjustProduct, setStockAdjustProduct] = useState(null);
+  const [stockAdjustQty, setStockAdjustQty] = useState('');
+  const [stockAdjustReason, setStockAdjustReason] = useState('');
   const [showCashRegister, setShowCashRegister] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [cashItems, setCashItems] = useState([]);
@@ -717,6 +730,84 @@ export default function MainStore({ staff, onLogout }) {
         Alert.alert('✅ Staff Added!', `${newStaffName} has been added.\nThey can login with PIN: ${newStaffPin}`);
       }
     } catch { Alert.alert('Error', 'Could not add staff'); }
+  };
+
+  const adjustStock = async () => {
+    if (!stockAdjustProduct || !stockAdjustQty) return;
+    try {
+      await fetch(`${API_URL}/products/${stockAdjustProduct.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stock_qty: parseInt(stockAdjustQty) })
+      });
+      logActivity(
+        'Stock Adjusted',
+        `${stockAdjustProduct.name_en}: set to ${stockAdjustQty} units. Reason: ${stockAdjustReason || 'Manual adjustment'}`
+      );
+      fetchProducts();
+      setShowStockAdjust(false);
+      setStockAdjustProduct(null);
+      setStockAdjustQty('');
+      setStockAdjustReason('');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Done!', 'Stock updated successfully');
+    } catch { Alert.alert('Error', 'Could not update stock'); }
+  };
+
+  const sendBulkWhatsApp = () => {
+    if (!bulkMessage.trim()) { Alert.alert('Required', 'Enter a message first'); return; }
+    const msg =
+      `*New Rahul Auto Spares*\n` +
+      `Telugu Peta, Nandyal\n\n` +
+      `${bulkMessage}\n\n` +
+      `📞 08514-244944\n` +
+      `💬 wa.me/916300281504`;
+    Linking.openURL(`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(msg)}`);
+    setBulkMessage('');
+    setShowBulkMessage(false);
+  };
+
+  const generateEndOfDay = () => {
+    const pending = orders.filter(o => o.status !== 'collected').length;
+    const todayOrders2 = orders.filter(o => {
+      const d = new Date(o.created_at);
+      const today = new Date();
+      return d.toDateString() === today.toDateString();
+    });
+    const todayRev = todayOrders2.reduce((s, o) => s + (o.total_amount || 0), 0);
+    const msg =
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `*END OF DAY REPORT*\n` +
+      `New Rahul Auto Spares\n` +
+      `${new Date().toLocaleDateString('en-IN')}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `Orders Today: ${todayOrders2.length}\n` +
+      `Revenue: ₹${todayRev.toFixed(0)}\n` +
+      `Pending Orders: ${pending}\n` +
+      `Low Stock Items: ${lowStockProducts.length}\n\n` +
+      `Staff Present Today:\n` +
+      `• Check attendance for details\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━`;
+    Linking.openURL(`https://wa.me/919642536653?text=${encodeURIComponent(msg)}`);
+    setShowEndOfDay(false);
+  };
+
+  const addToBlacklist = () => {
+    if (!blacklistName.trim() || !blacklistPhone.trim()) {
+      Alert.alert('Required', 'Name and phone are required');
+      return;
+    }
+    const newEntry = {
+      id: Date.now(),
+      name: blacklistName.trim(),
+      phone: blacklistPhone.trim(),
+      reason: blacklistReason.trim(),
+      date: new Date().toLocaleDateString('en-IN')
+    };
+    setBlacklist(b => [...b, newEntry]);
+    setBlacklistName(''); setBlacklistPhone(''); setBlacklistReason('');
+    logActivity('Customer Blacklisted', `${newEntry.name} - ${newEntry.reason}`);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const fetchDashboard = async () => {
@@ -1428,7 +1519,192 @@ export default function MainStore({ staff, onLogout }) {
           </View>
         )}
 
-        {/* ══ CASH REGISTER MODAL ══ */}
+        {/* ══ BULK WHATSAPP MODAL ══ */}
+      <Modal visible={showBulkMessage} animationType="slide"
+        onRequestClose={() => setShowBulkMessage(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn} onPress={() => setShowBulkMessage(false)}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>Bulk WhatsApp</Text>
+          </View>
+          <View style={{ padding: 16 }}>
+            <Text style={s.historyTitle}>COMPOSE MESSAGE</Text>
+            <TextInput
+              style={[s.vendorOrderInput, { minHeight: 140 }]}
+              placeholder={'Example:\nNew stock arrived!\nHero Splendor parts now available.\nVisit us at Telugu Peta, Nandyal'}
+              placeholderTextColor="rgba(255,255,255,0.2)"
+              value={bulkMessage}
+              onChangeText={setBulkMessage}
+              multiline numberOfLines={6}
+              textAlignVertical="top"
+            />
+            <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, marginBottom: 16 }}>
+              Your store details will be added automatically at the bottom.
+            </Text>
+            <TouchableOpacity style={s.saveVendorBtn} onPress={sendBulkWhatsApp}>
+              <Text style={s.saveVendorBtnText}>Send via WhatsApp</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ END OF DAY MODAL ══ */}
+      <Modal visible={showEndOfDay} animationType="slide"
+        onRequestClose={() => setShowEndOfDay(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn} onPress={() => setShowEndOfDay(false)}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>End of Day</Text>
+          </View>
+          <View style={{ padding: 16 }}>
+            <View style={[s.addRewardForm, { gap: 16 }]}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#fff' }}>Before Closing Checklist</Text>
+              {[
+                { icon: 'receipt-outline', text: `Pending orders: ${orders.filter(o => o.status !== 'collected').length}`, color: orders.filter(o => o.status !== 'collected').length > 0 ? '#EF4444' : G },
+                { icon: 'warning-outline', text: `Low stock items: ${lowStockProducts.length}`, color: lowStockProducts.length > 0 ? '#F59E0B' : G },
+                { icon: 'people-outline', text: 'Clock out all staff', color: 'rgba(255,255,255,0.5)' },
+                { icon: 'cash-outline', text: 'Count cash in drawer', color: 'rgba(255,255,255,0.5)' },
+                { icon: 'lock-closed-outline', text: 'Lock store', color: 'rgba(255,255,255,0.5)' },
+              ].map((item, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <Ionicons name={item.icon} size={20} color={item.color} />
+                  <Text style={{ fontSize: 14, color: item.color }}>{item.text}</Text>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity style={[s.saveVendorBtn, { marginTop: 16 }]} onPress={generateEndOfDay}>
+              <Text style={s.saveVendorBtnText}>Send Report to Owner WhatsApp</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ STOCK ADJUSTMENT MODAL ══ */}
+      <Modal visible={showStockAdjust} animationType="slide"
+        onRequestClose={() => setShowStockAdjust(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn} onPress={() => setShowStockAdjust(false)}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>Stock Adjustment</Text>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 14 }}>
+            {stockAdjustProduct ? (
+              <View style={s.addRewardForm}>
+                <Text style={s.addRewardFormTitle}>Adjust: {stockAdjustProduct.name_en}</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginBottom: 8 }}>
+                  Current stock: {stockAdjustProduct.stock_qty} units
+                </Text>
+                <TextInput style={s.vendorInput}
+                  placeholder="New stock quantity"
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  value={stockAdjustQty} onChangeText={setStockAdjustQty}
+                  keyboardType="numeric" />
+                <TextInput style={s.vendorInput}
+                  placeholder="Reason (e.g. Damaged, Physical count)"
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  value={stockAdjustReason} onChangeText={setStockAdjustReason} />
+                <TouchableOpacity style={s.saveVendorBtn} onPress={adjustStock}>
+                  <Text style={s.saveVendorBtnText}>Update Stock</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ padding: 12, alignItems: 'center' }}
+                  onPress={() => setStockAdjustProduct(null)}>
+                  <Text style={{ color: 'rgba(255,255,255,0.4)' }}>← Back to list</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <Text style={s.historyTitle}>SELECT PRODUCT TO ADJUST</Text>
+                {products.map(p => (
+                  <TouchableOpacity key={p.id} style={s.cashProductRow}
+                    onPress={() => { setStockAdjustProduct(p); setStockAdjustQty(p.stock_qty.toString()); }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.cashProductName}>{p.name_en}</Text>
+                      <Text style={s.cashProductSku}>{p.sku}</Text>
+                    </View>
+                    <Text style={[s.cashProductPrice, { color: p.stock_qty <= 5 ? '#EF4444' : G }]}>
+                      {p.stock_qty} left
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.3)" />
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ BLACKLIST MODAL ══ */}
+      <Modal visible={showBlacklist} animationType="slide"
+        onRequestClose={() => setShowBlacklist(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.modalHeader}>
+            <TouchableOpacity style={s.modalBackBtn} onPress={() => setShowBlacklist(false)}>
+              <Ionicons name="arrow-back" size={20} color={G} />
+            </TouchableOpacity>
+            <Text style={s.modalHeaderTitle}>Customer Blacklist</Text>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 14 }}>
+            <View style={s.addRewardForm}>
+              <Text style={s.addRewardFormTitle}>Add to Blacklist</Text>
+              <TextInput style={s.vendorInput}
+                placeholder="Customer Name *"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={blacklistName} onChangeText={setBlacklistName} />
+              <TextInput style={s.vendorInput}
+                placeholder="Phone Number *"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={blacklistPhone} onChangeText={setBlacklistPhone}
+                keyboardType="phone-pad" maxLength={10} />
+              <TextInput style={s.vendorInput}
+                placeholder="Reason (e.g. Did not pay, Fraud)"
+                placeholderTextColor="rgba(255,255,255,0.2)"
+                value={blacklistReason} onChangeText={setBlacklistReason} />
+              <TouchableOpacity style={[s.saveVendorBtn, { backgroundColor: '#EF4444' }]}
+                onPress={addToBlacklist}>
+                <Text style={s.saveVendorBtnText}>Add to Blacklist</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={s.historyTitle}>BLACKLISTED CUSTOMERS</Text>
+            {blacklist.length === 0 ? (
+              <Text style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: 20 }}>
+                No blacklisted customers
+              </Text>
+            ) : (
+              blacklist.map(b => (
+                <View key={b.id} style={[s.vendorCard, { borderColor: 'rgba(239,68,68,0.2)' }]}>
+                  <View style={[s.staffCardAvatar, { backgroundColor: 'rgba(239,68,68,0.1)' }]}>
+                    <Ionicons name="ban" size={20} color="#EF4444" />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={s.staffCardName}>{b.name}</Text>
+                    <Text style={s.staffCardPhone}>+91 {b.phone}</Text>
+                    <Text style={{ fontSize: 11, color: '#EF4444', marginTop: 2 }}>{b.reason}</Text>
+                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Added: {b.date}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setBlacklist(bl => bl.filter(x => x.id !== b.id))}>
+                    <Ionicons name="trash-outline" size={18} color="rgba(239,68,68,0.5)" />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ══ CASH REGISTER MODAL ══ */}
       <Modal visible={showCashRegister} animationType="slide"
         onRequestClose={() => setShowCashRegister(false)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: '#060E06' }}>
@@ -2316,6 +2592,66 @@ export default function MainStore({ staff, onLogout }) {
                   <View>
                     <Text style={s.customerHistoryBtnTitle}>Activity Log</Text>
                     <Text style={s.customerHistoryBtnSub}>See all staff actions in real-time</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            )}
+
+            {/* BULK WHATSAPP */}
+            {isOwner && (
+              <TouchableOpacity style={s.customerHistoryBtn}
+                onPress={() => setShowBulkMessage(true)}>
+                <View style={s.customerHistoryBtnLeft}>
+                  <Ionicons name="megaphone" size={22} color="#25D366" />
+                  <View>
+                    <Text style={s.customerHistoryBtnTitle}>Bulk WhatsApp</Text>
+                    <Text style={s.customerHistoryBtnSub}>Send message to all customers</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            )}
+
+            {/* END OF DAY */}
+            {isOwner && (
+              <TouchableOpacity style={s.customerHistoryBtn}
+                onPress={() => setShowEndOfDay(true)}>
+                <View style={s.customerHistoryBtnLeft}>
+                  <Ionicons name="moon" size={22} color="#8B5CF6" />
+                  <View>
+                    <Text style={s.customerHistoryBtnTitle}>End of Day Report</Text>
+                    <Text style={s.customerHistoryBtnSub}>Daily summary to owner WhatsApp</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            )}
+
+            {/* STOCK ADJUSTMENT */}
+            {isOwner && (
+              <TouchableOpacity style={s.customerHistoryBtn}
+                onPress={() => { fetchProducts(); setShowStockAdjust(true); }}>
+                <View style={s.customerHistoryBtnLeft}>
+                  <Ionicons name="settings" size={22} color="#F59E0B" />
+                  <View>
+                    <Text style={s.customerHistoryBtnTitle}>Stock Adjustment</Text>
+                    <Text style={s.customerHistoryBtnSub}>Write-off, damage, physical count</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            )}
+
+            {/* CUSTOMER BLACKLIST */}
+            {isOwner && (
+              <TouchableOpacity style={[s.customerHistoryBtn, { borderColor: 'rgba(239,68,68,0.2)' }]}
+                onPress={() => setShowBlacklist(true)}>
+                <View style={s.customerHistoryBtnLeft}>
+                  <Ionicons name="ban" size={22} color="#EF4444" />
+                  <View>
+                    <Text style={[s.customerHistoryBtnTitle, { color: '#EF4444' }]}>Customer Blacklist</Text>
+                    <Text style={s.customerHistoryBtnSub}>Block problematic customers</Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
