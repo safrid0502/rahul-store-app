@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "837006339642",
+    "project_id": "rahul-auto-spare",
+    "storage_bucket": "rahul-auto-spare.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:837006339642:android:291388ed6d0be482350f03",
+        "android_client_info": {
+          "package_name": "com.rahulautospares.store"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB1ndSrYbadS3ZOVisgN00brh-Tme0cYA8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

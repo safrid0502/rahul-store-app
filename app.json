@@ -17,13 +17,15 @@
       },
       "package": "com.rahulautospares.store",
       "permissions": [
-        "INTERNET",
-        "ACCESS_NETWORK_STATE",
-        "VIBRATE",
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
-      ]
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.VIBRATE",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "extra": {
       "eas": {
@@ -33,7 +35,19 @@
     "icon": "./assets/icon.png",
     "plugins": [
       "expo-notifications",
-      "expo-image-picker"
-    ]
+      "./plugins/withFullScreenOrderAlert.js",
+      "expo-image-picker",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "react-native",
+          "organization": "rahul-auto-spares"
+        }
+      ]
+    ],
+    "ios": {
+      "bundleIdentifier": "com.rahulautospares.store"
+    }
   }
 }

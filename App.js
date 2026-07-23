@@ -1,16 +1,111 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { NativeModules } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LoginScreen from './screens/LoginScreen';
 import MainStore from './screens/MainStore';
+import * as Sentry from '@sentry/react-native';
 
-export default function App() {
+const API_SECRET_KEY = 'zFWqAraDGYhsNzIe76vXOm0hifitH1bxLmQ6S-8qeN8';
+const API_BASE = 'https://rahul-auto-spares-backend.onrender.com';
+
+const originalFetch = global.fetch;
+global.fetch = (url, options = {}) => {
+  if (typeof url === 'string' && url.startsWith(API_BASE)) {
+    options.headers = { ...(options.headers || {}), 'x-api-key': API_SECRET_KEY };
+  }
+  return originalFetch(url, options);
+};
+
+Sentry.init({
+  dsn: 'https://a9a9e70d4682f86314b3606d58b0c74d@o4511731723534336.ingest.us.sentry.io/4511731770261509',
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  sendDefaultPii: true,
+
+  // Enable Logs
+  enableLogs: true,
+
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+
+  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+  // spotlight: __DEV__,
+});
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+function startOrderAlertListener() {
+  Notifications.addNotificationReceivedListener((notification) => {
+    const data = notification.request?.content?.data;
+    const body = notification.request?.content?.body || '';
+    if (data?.type === 'new_order' && NativeModules.OrderAlertModule) {
+      const amountMatch = body.match(/Rs\\.?\\s*([0-9,.]+)/);
+      const amount = amountMatch ? amountMatch[1] : '';
+      NativeModules.OrderAlertModule.showOrderAlert(
+        data.custom_id || 'New Order',
+        amount
+      );
+    }
+  });
+}
+async function setupNotificationChannel() {
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('new-orders', {
+      name: 'New Orders',
+      importance: Notifications.AndroidImportance.MAX,
+      sound: 'default',
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#22C55E',
+    });
+  }
+}
+
+async function registerForPushNotifications(staffId) {
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return;
+
+    await setupNotificationChannel();
+
+    const tokenResponse = await Notifications.getExpoPushTokenAsync();
+    const pushToken = tokenResponse.data;
+
+    await fetch(
+      `https://rahul-auto-spares-backend.onrender.com/staff/${staffId}/register-push-token`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ push_token: pushToken }),
+      }
+    );
+  } catch (e) {
+    console.log('Push notification registration failed:', e);
+  }
+}
+
+export default Sentry.wrap(function App() {
   const [staff, setStaff] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { checkLogin(); }, []);
+  useEffect(() => { checkLogin(); startOrderAlertListener(); }, []);
 
   const checkLogin = async () => {
     try {
@@ -30,6 +125,7 @@ export default function App() {
               const updated = { ...parsed, ...d.staff };
               await AsyncStorage.setItem('staff_profile', JSON.stringify(updated));
               setStaff(updated);
+              registerForPushNotifications(updated.id);
             } else {
               // Staff no longer exists
               await AsyncStorage.removeItem('staff_profile');
@@ -52,6 +148,7 @@ export default function App() {
       'staff_profile', JSON.stringify(staffMember)
     );
     setStaff(staffMember);
+    registerForPushNotifications(staffMember.id);
   };
 
   const handleLogout = async () => {
@@ -74,7 +171,7 @@ export default function App() {
       )}
     </>
   );
-}
+});
 const ls = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   logoBox: {

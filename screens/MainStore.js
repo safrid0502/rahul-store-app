@@ -20,6 +20,8 @@ import SalesDashboardScreen from './SalesDashboardScreen';
 import { generateInvoice, shareInvoice } from '../utils/invoice';
 
 const API_URL = 'https://rahul-auto-spares-backend.onrender.com';
+const WHATSAPP = '916300281504';
+const STORE_UPI = 'rahulautospares@paytm';
 const ORDERS_CACHE = 'store_orders_cache';
 const G = '#22C55E';
 
@@ -58,6 +60,7 @@ function BottomNav({ active, onChange, newCount }) {
   const tabs = [
     { id: 'orders',  icon: 'receipt-outline',     label: 'Orders', badge: newCount },
     { id: 'stock',   icon: 'cube-outline',          label: 'Stock' },
+    { id: 'scanner', icon: 'qr-code-outline',       label: 'Scan' },
     { id: 'vendors', icon: 'business-outline',      label: 'Vendors' },
     { id: 'reports', icon: 'bar-chart-outline',     label: 'Reports' },
     { id: 'profile', icon: 'person-circle-outline', label: 'Me' },
@@ -556,6 +559,10 @@ export default function MainStore({ staff, onLogout }) {
   const [newStaffRole, setNewStaffRole] = useState('staff');
   const [newStaffPin, setNewStaffPin] = useState('');
   const [allStaff, setAllStaff] = useState([]);
+  const [editingStaffId, setEditingStaffId] = useState(null);
+  const [editStaffName, setEditStaffName] = useState('');
+  const [editStaffPhone, setEditStaffPhone] = useState('');
+  const [editStaffRole, setEditStaffRole] = useState('staff');
   const [newRewardName, setNewRewardName] = useState('');
   const [newRewardDesc, setNewRewardDesc] = useState('');
   const [newRewardPoints, setNewRewardPoints] = useState('');
@@ -735,11 +742,12 @@ export default function MainStore({ staff, onLogout }) {
   const adjustStock = async () => {
     if (!stockAdjustProduct || !stockAdjustQty) return;
     try {
-      await fetch(`${API_URL}/products/${stockAdjustProduct.id}`, {
+      const r = await fetch(`${API_URL}/products/${stockAdjustProduct.id}/stock`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stock_qty: parseInt(stockAdjustQty) })
       });
+      if (!r.ok) throw new Error('failed');
       logActivity(
         'Stock Adjusted',
         `${stockAdjustProduct.name_en}: set to ${stockAdjustQty} units. Reason: ${stockAdjustReason || 'Manual adjustment'}`
@@ -892,6 +900,100 @@ export default function MainStore({ staff, onLogout }) {
     } catch { Alert.alert('Error', 'Could not create order'); }
   };
 
+  const updateStaffMember = async (staffId) => {
+    if (!editStaffName.trim()) {
+      Alert.alert('Required', 'Name cannot be empty');
+      return;
+    }
+    try {
+      const r = await fetch(`${API_URL}/staff/${staffId}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editStaffName.trim(),
+          phone: editStaffPhone.trim(),
+          role: editStaffRole,
+        })
+      });
+      await r.json();
+      setEditingStaffId(null);
+      fetchAllStaff();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Updated', `${editStaffName}'s profile has been updated.`);
+    } catch {
+      Alert.alert('Error', 'Could not update staff member');
+    }
+  };
+
+  const resetStaffPin = (staffId, staffName, staffPhone) => {
+    const newPin = String(Math.floor(1000 + Math.random() * 9000));
+    Alert.alert(
+      'Reset PIN',
+      `Generate a new PIN for ${staffName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          onPress: async () => {
+            try {
+              const r = await fetch(`${API_URL}/staff/${staffId}/reset-pin`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: newPin })
+              });
+              const d = await r.json();
+              if (d.success) {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert(
+                  'PIN Reset',
+                  `New PIN: ${newPin}`,
+                  [
+                    {
+                      text: 'Send via WhatsApp',
+                      onPress: () => {
+                        if (staffPhone) {
+                          const msg = `Your new login PIN is: ${newPin}`;
+                          Linking.openURL(`https://wa.me/91${staffPhone}?text=${encodeURIComponent(msg)}`);
+                        }
+                      }
+                    },
+                    { text: 'Done' }
+                  ]
+                );
+              } else {
+                Alert.alert('Error', d.error || 'Could not reset PIN');
+              }
+            } catch {
+              Alert.alert('Error', 'Could not reset PIN');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const deleteStaffMember = (staffId, staffName) => {
+    Alert.alert(
+      'Remove Staff Member',
+      `Remove ${staffName} from staff list?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove', style: 'destructive',
+          onPress: async () => {
+            try {
+              await fetch(`${API_URL}/staff/${staffId}`, { method: 'DELETE' });
+              fetchAllStaff();
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch {
+              Alert.alert('Error', 'Could not remove staff member');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const fetchStoreRewards = async () => {
     try {
       const r = await fetch(`${API_URL}/rewards`);
@@ -926,9 +1028,12 @@ export default function MainStore({ staff, onLogout }) {
 
   const deleteReward = async (id) => {
     try {
-      await fetch(`${API_URL}/rewards/${id}`, { method: 'DELETE' });
+      const r = await fetch(`${API_URL}/rewards/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('failed');
       fetchStoreRewards();
-    } catch {}
+    } catch {
+      Alert.alert('❌ Error', 'Could not delete reward');
+    }
   };
 
   const fetchLowStock = async () => {
@@ -946,6 +1051,9 @@ export default function MainStore({ staff, onLogout }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      if (selectedOrder?.id === orderId)
+        setSelectedOrder(prev => ({ ...prev, status: newStatus }));
       // Log activity
       const statusLabels = { packing: 'Started Packing', ready: 'Marked Ready', collected: 'Marked Collected' };
       logActivity(
@@ -1046,15 +1154,18 @@ export default function MainStore({ staff, onLogout }) {
 
   const updatePayment = async (orderId, type) => {
     try {
-      await fetch(`${API_URL}/orders/${orderId}`, {
+      const r = await fetch(`${API_URL}/orders/${orderId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ payment_type: type })
       });
+      if (!r.ok) throw new Error('failed');
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, payment_type: type } : o));
       if (selectedOrder?.id === orderId)
         setSelectedOrder(prev => ({ ...prev, payment_type: type }));
-    } catch {}
+    } catch {
+      Alert.alert('❌ Error', 'Could not save payment. Please try again.');
+    }
   };
 
   const handleQRScanned = async (orderId) => {
@@ -1135,17 +1246,25 @@ export default function MainStore({ staff, onLogout }) {
 
   const toggleOffer = async (id) => {
     try {
-      await fetch(`${API_URL}/offers/${id}/toggle`, { method: 'PUT' });
+      const r = await fetch(`${API_URL}/offers/${id}/toggle`, { method: 'PUT' });
+      if (!r.ok) throw new Error('failed');
       await fetchOffers();
-    } catch {}
+    } catch {
+      Alert.alert('❌ Error', 'Could not update offer');
+    }
   };
 
   const deleteOffer = (id) => {
     Alert.alert('Delete?', 'Remove this offer?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        await fetch(`${API_URL}/offers/${id}`, { method: 'DELETE' });
-        await fetchOffers();
+        try {
+          const r = await fetch(`${API_URL}/offers/${id}`, { method: 'DELETE' });
+          if (!r.ok) throw new Error('failed');
+          await fetchOffers();
+        } catch {
+          Alert.alert('❌ Error', 'Could not delete offer');
+        }
       }}
     ]);
   };
@@ -1167,15 +1286,25 @@ export default function MainStore({ staff, onLogout }) {
       Alert.alert('Clock Out?', 'End your shift?', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Clock Out', onPress: async () => {
-          await fetch(`${API_URL}/staff/${staff?.id}/clockout`, { method: 'POST' });
-          setIsClockedIn(false); setClockTime(null);
-          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          try {
+            const r = await fetch(`${API_URL}/staff/${staff?.id}/clockout`, { method: 'POST' });
+            if (!r.ok) throw new Error('failed');
+            setIsClockedIn(false); setClockTime(null);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch {
+            Alert.alert('❌ Error', 'Could not clock out. Please try again.');
+          }
         }}
       ]);
     } else {
-      await fetch(`${API_URL}/staff/${staff?.id}/clockin`, { method: 'POST' });
-      setIsClockedIn(true); setClockTime(new Date().toISOString());
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      try {
+        const r = await fetch(`${API_URL}/staff/${staff?.id}/clockin`, { method: 'POST' });
+        if (!r.ok) throw new Error('failed');
+        setIsClockedIn(true); setClockTime(new Date().toISOString());
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        Alert.alert('❌ Error', 'Could not clock in. Please try again.');
+      }
     }
   };
 
@@ -1849,36 +1978,96 @@ export default function MainStore({ staff, onLogout }) {
             <Text style={s.historyTitle}>CURRENT STAFF ({allStaff.length})</Text>
             {allStaff.map(member => (
               <View key={member.id} style={s.staffCard}>
-                <View style={s.staffCardAvatar}>
-                  <Text style={s.staffCardInitials}>
-                    {(member.name || '?').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.staffCardName}>{member.name}</Text>
-                  <View style={s.staffCardRow}>
-                    <View style={[s.staffRolePill, {
-                      backgroundColor: member.role === 'owner' ? 'rgba(201,168,76,0.15)'
-                        : member.role === 'senior' ? 'rgba(79,110,247,0.15)'
-                        : 'rgba(34,197,94,0.15)'
-                    }]}>
-                      <Text style={[s.staffRolePillText, {
-                        color: member.role === 'owner' ? '#C9A84C'
-                          : member.role === 'senior' ? '#4F6EF7' : '#22C55E'
-                      }]}>
-                        {member.role?.toUpperCase()}
+                {editingStaffId === member.id ? (
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.staffInputLabel}>Full Name</Text>
+                    <TextInput style={s.vendorInput}
+                      value={editStaffName} onChangeText={setEditStaffName}
+                      autoCapitalize="words" />
+
+                    <Text style={s.staffInputLabel}>Phone Number</Text>
+                    <TextInput style={s.vendorInput}
+                      value={editStaffPhone} onChangeText={setEditStaffPhone}
+                      keyboardType="phone-pad" maxLength={10} />
+
+                    <Text style={s.staffInputLabel}>Role</Text>
+                    <View style={s.roleSelector}>
+                      {['staff', 'senior', 'owner'].map(role => (
+                        <TouchableOpacity key={role}
+                          style={[s.roleBtn, editStaffRole === role && s.roleBtnActive]}
+                          onPress={() => setEditStaffRole(role)}>
+                          <Text style={[s.roleBtnText, editStaffRole === role && s.roleBtnTextActive]}>
+                            {role === 'owner' ? 'Owner' : role === 'senior' ? 'Senior' : 'Staff'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                      <TouchableOpacity style={[s.saveVendorBtn, { flex: 1 }]}
+                        onPress={() => updateStaffMember(member.id)}>
+                        <Text style={s.saveVendorBtnText}>Save</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[s.saveVendorBtn, { flex: 1, backgroundColor: 'rgba(255,255,255,0.08)' }]}
+                        onPress={() => setEditingStaffId(null)}>
+                        <Text style={[s.saveVendorBtnText, { color: 'rgba(255,255,255,0.6)' }]}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <>
+                    <View style={s.staffCardAvatar}>
+                      <Text style={s.staffCardInitials}>
+                        {(member.name || '?').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase()}
                       </Text>
                     </View>
-                    {member.phone && (
-                      <Text style={s.staffCardPhone}>+91 {member.phone}</Text>
-                    )}
-                  </View>
-                  <Text style={s.staffCardId}>Staff ID #{member.id}</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => Linking.openURL(`tel:${member.phone}`)}>
-                  <Ionicons name="call-outline" size={20} color={G} />
-                </TouchableOpacity>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.staffCardName}>{member.name}</Text>
+                      <View style={s.staffCardRow}>
+                        <View style={[s.staffRolePill, {
+                          backgroundColor: member.role === 'owner' ? 'rgba(201,168,76,0.15)'
+                            : member.role === 'senior' ? 'rgba(79,110,247,0.15)'
+                            : 'rgba(34,197,94,0.15)'
+                        }]}>
+                          <Text style={[s.staffRolePillText, {
+                            color: member.role === 'owner' ? '#C9A84C'
+                              : member.role === 'senior' ? '#4F6EF7' : '#22C55E'
+                          }]}>
+                            {member.role?.toUpperCase()}
+                          </Text>
+                        </View>
+                        {member.phone && (
+                          <Text style={s.staffCardPhone}>+91 {member.phone}</Text>
+                        )}
+                      </View>
+                      <Text style={s.staffCardId}>Staff ID #{member.id}</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => Linking.openURL(`tel:${member.phone}`)}
+                      style={{ marginRight: 14 }}>
+                      <Ionicons name="call-outline" size={20} color={G} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setEditingStaffId(member.id);
+                        setEditStaffName(member.name || '');
+                        setEditStaffPhone(member.phone || '');
+                        setEditStaffRole(member.role || 'staff');
+                      }}
+                      style={{ marginRight: 14 }}>
+                      <Ionicons name="create-outline" size={20} color="#FFB800" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => resetStaffPin(member.id, member.name, member.phone)}
+                      style={{ marginRight: 14 }}>
+                      <Ionicons name="key-outline" size={20} color="#4F6EF7" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => deleteStaffMember(member.id, member.name)}>
+                      <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             ))}
             <View style={{ height: 40 }} />
@@ -2268,6 +2457,14 @@ export default function MainStore({ staff, onLogout }) {
                         Linking.openURL(`https://wa.me/916300281504?text=${encodeURIComponent(msg)}`);
                       }}>
                       <Ionicons name="cart-outline" size={14} color="#F59E0B" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[s.lowStockOrderBtn, { marginLeft: 6 }]}
+                      onPress={() => {
+                        setStockAdjustProduct(p);
+                        setStockAdjustQty(p.stock_qty.toString());
+                        setShowStockAdjust(true);
+                      }}>
+                      <Ionicons name="create-outline" size={14} color="#22C55E" />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -3032,6 +3229,16 @@ export default function MainStore({ staff, onLogout }) {
                     onPress={() => Linking.openURL(`tel:${selectedOrder.customer_phone}`)}>
                     <Text style={s.detailLabel}>Phone</Text>
                     <Text style={[s.detailValue, { color: G }]}>📞 {selectedOrder.customer_phone}</Text>
+                  </TouchableOpacity>
+                )}
+                {selectedOrder.customer_phone && (isOwner || isSenior) && (
+                  <TouchableOpacity style={s.detailRow}
+                    onPress={() => {
+                      const msg = `Please pay ₹${selectedOrder.total_amount} to:\n${STORE_UPI}\n\nOrder: ${selectedOrder.custom_id || 'RAS-' + selectedOrder.id}`;
+                      Linking.openURL(`https://wa.me/91${selectedOrder.customer_phone}?text=${encodeURIComponent(msg)}`);
+                    }}>
+                    <Text style={s.detailLabel}>Send UPI</Text>
+                    <Text style={[s.detailValue, { color: G }]}>📱 Send Payment Details</Text>
                   </TouchableOpacity>
                 )}
                 <View style={s.detailRow}>

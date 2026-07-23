@@ -16,7 +16,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width, height } = Dimensions.get('window');
 const API_URL = 'https://rahul-auto-spares-backend.onrender.com';
 
-// Default staff - used as fallback if backend is down
 const DEFAULT_STAFF = [
   { id: 1, name: 'Abdul Azeez', role: 'owner',  pin: '1111', color: '#C9A84C', initials: 'AA' },
   { id: 2, name: 'Chand Basha', role: 'senior', pin: '2222', color: '#4F6EF7', initials: 'CB' },
@@ -61,10 +60,8 @@ export default function LoginScreen({ onLogin }) {
 
   const loadStaff = async () => {
     try {
-      // Try cached first
       const cached = await AsyncStorage.getItem('staff_list_cache');
       if (cached) setStaffList(JSON.parse(cached));
-      // Then fetch fresh from backend
       const r = await fetch(`${API_URL}/staff`);
       const d = await r.json();
       if (d.staff && d.staff.length > 0) {
@@ -81,7 +78,6 @@ export default function LoginScreen({ onLogin }) {
         await AsyncStorage.setItem('staff_list_cache', JSON.stringify(mapped));
       }
     } catch {
-      // Use default if backend fails
       setStaffList(DEFAULT_STAFF);
     }
     setLoadingStaff(false);
@@ -161,26 +157,19 @@ export default function LoginScreen({ onLogin }) {
     setTimeout(() => setPin(''), 500);
   };
 
-  const roleConfig = selectedStaff ? ROLE_CONFIG[selectedStaff.role] : null;
+  const roleConfig = selectedStaff ? (ROLE_CONFIG[selectedStaff.role] || ROLE_CONFIG.staff) : null;
 
-  // ─────────────────────────────────────────
-  // STEP 1: SELECT STAFF
-  // ─────────────────────────────────────────
   if (step === 'select') {
     return (
       <SafeAreaView style={s.container}>
         <StatusBar barStyle="light-content" backgroundColor="#060E06" />
-
-        {/* BACKGROUND GRADIENT */}
         <LinearGradient
           colors={['#0A1A0A', '#060E06', '#060E06']}
           style={StyleSheet.absoluteFill} />
-
         <Animated.View style={[s.selectContainer, {
           opacity: fadeAnim,
           transform: [{ translateY: slideAnim }, { scale: scaleAnim }]
         }]}>
-          {/* BRAND HEADER */}
           <View style={s.brandHeader}>
             <View style={s.brandLogoBox}>
               <LinearGradient
@@ -194,10 +183,8 @@ export default function LoginScreen({ onLogin }) {
             <Text style={s.brandTagline}>STAFF PORTAL</Text>
           </View>
 
-          {/* WHO ARE YOU */}
           <View style={s.selectSection}>
             <Text style={s.selectTitle}>SELECT YOUR PROFILE</Text>
-
             {loadingStaff ? (
             <View style={{ alignItems: 'center', padding: 20 }}>
               <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading staff...</Text>
@@ -205,7 +192,7 @@ export default function LoginScreen({ onLogin }) {
           ) : null}
           <View style={s.staffGrid}>
               {staffList.map(member => {
-                const rc = ROLE_CONFIG[member.role];
+                const rc = ROLE_CONFIG[member.role] || ROLE_CONFIG.staff;
                 return (
                   <TouchableOpacity key={member.id}
                     style={s.staffCard}
@@ -214,20 +201,13 @@ export default function LoginScreen({ onLogin }) {
                     <LinearGradient
                       colors={['#0D1A0D', '#060E06']}
                       style={s.staffCardGrad}>
-                      {/* Color bar at top */}
                       <View style={[s.staffCardBar, { backgroundColor: member.color }]} />
-
-                      {/* Avatar */}
                       <View style={[s.staffCardAvatar, { borderColor: member.color + '50' }]}>
                         <Text style={[s.staffCardInitials, { color: member.color }]}>
                           {member.initials}
                         </Text>
                       </View>
-
-                      {/* Name */}
                       <Text style={s.staffCardName}>{member.name}</Text>
-
-                      {/* Role badge */}
                       <View style={[s.staffRoleBadge, { backgroundColor: member.color + '15' }]}>
                         <Ionicons name={rc.icon} size={10} color={member.color} />
                         <Text style={[s.staffRoleText, { color: member.color }]}>
@@ -241,7 +221,6 @@ export default function LoginScreen({ onLogin }) {
             </View>
           </View>
 
-          {/* FOOTER */}
           <Text style={s.footerText}>
             New Rahul Auto Spares · Nandyal · Staff Only
           </Text>
@@ -250,20 +229,14 @@ export default function LoginScreen({ onLogin }) {
     );
   }
 
-  // ─────────────────────────────────────────
-  // STEP 2: PIN ENTRY
-  // ─────────────────────────────────────────
   return (
     <SafeAreaView style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#060E06" />
       <LinearGradient colors={['#0A1A0A', '#060E06']} style={StyleSheet.absoluteFill} />
-
       <Animated.View style={[s.pinContainer, {
         opacity: fadeAnim,
         transform: [{ translateY: slideAnim }]
       }]}>
-
-        {/* BACK */}
         <TouchableOpacity style={s.backBtn}
           onPress={() => {
             fadeAnim.setValue(0);
@@ -277,7 +250,6 @@ export default function LoginScreen({ onLogin }) {
           <Text style={s.backBtnText}>Change</Text>
         </TouchableOpacity>
 
-        {/* SELECTED STAFF CARD */}
         <View style={s.selectedStaffCard}>
           <LinearGradient
             colors={[selectedStaff.color + '20', selectedStaff.color + '08']}
@@ -302,7 +274,6 @@ export default function LoginScreen({ onLogin }) {
         <Text style={s.pinTitle}>Enter PIN</Text>
         <Text style={s.pinSubtitle}>Your 4-digit security PIN</Text>
 
-        {/* PIN DOTS */}
         <Animated.View style={[s.dotsRow, { transform: [{ translateX: shakeAnim }] }]}>
           {[0,1,2,3].map(i => (
             <Animated.View key={i}
@@ -314,13 +285,11 @@ export default function LoginScreen({ onLogin }) {
           ))}
         </Animated.View>
 
-        {/* ERROR or HINT */}
         {error
           ? <Text style={s.errorText}>{error}</Text>
           : <Text style={s.hintText}>Enter your secure PIN to continue</Text>
         }
 
-        {/* KEYPAD */}
         <View style={s.keypad}>
           {KEYS.map((row, ri) => (
             <View key={ri} style={s.keyRow}>
@@ -356,11 +325,7 @@ export default function LoginScreen({ onLogin }) {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060E06' },
-
-  // Select screen
   selectContainer: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
-
-  // Brand header
   brandHeader: { alignItems: 'center', paddingVertical: 24 },
   brandLogoBox: { marginBottom: 14 },
   brandLogo: {
@@ -379,15 +344,11 @@ const s = StyleSheet.create({
     fontSize: 10, color: 'rgba(34,197,94,0.6)',
     letterSpacing: 4, fontWeight: '700',
   },
-
-  // Select section
   selectSection: { flex: 1 },
   selectTitle: {
     fontSize: 10, color: 'rgba(255,255,255,0.3)',
     letterSpacing: 3, fontWeight: '700', marginBottom: 16,
   },
-
-  // Staff grid
   staffGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   staffCard: { width: '48%', borderRadius: 16, overflow: 'hidden' },
   staffCardGrad: {
@@ -410,8 +371,6 @@ const s = StyleSheet.create({
     borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4,
   },
   staffRoleText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-
-  // PIN screen
   pinContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   backBtn: {
     position: 'absolute', top: 16, left: 16,
@@ -421,8 +380,6 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
   backBtnText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600' },
-
-  // Selected staff
   selectedStaffCard: { borderRadius: 16, overflow: 'hidden', marginBottom: 32, width: '75%' },
   selectedStaffGrad: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
@@ -438,8 +395,6 @@ const s = StyleSheet.create({
   selectedName: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 4 },
   selectedRoleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   selectedRole: { fontSize: 12, fontWeight: '600' },
-
-  // PIN
   pinTitle: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 6 },
   pinSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.3)', marginBottom: 28 },
   dotsRow: { flexDirection: 'row', gap: 20, marginBottom: 12 },
@@ -450,8 +405,6 @@ const s = StyleSheet.create({
   },
   errorText: { fontSize: 13, color: '#EF4444', fontWeight: '700', marginBottom: 24 },
   hintText: { fontSize: 12, color: 'rgba(255,255,255,0.2)', marginBottom: 24 },
-
-  // Keypad
   keypad: { width: '100%', gap: 12, marginBottom: 28 },
   keyRow: { flexDirection: 'row', justifyContent: 'center', gap: 14 },
   keyBtn: {
@@ -470,8 +423,6 @@ const s = StyleSheet.create({
     shadowOpacity: 0,
   },
   keyBtnText: { fontSize: 26, fontWeight: '700', color: '#fff' },
-
-  // Footer
   footerText: {
     fontSize: 11, color: 'rgba(255,255,255,0.12)',
     textAlign: 'center', letterSpacing: 0.5,
