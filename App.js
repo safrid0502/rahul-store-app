@@ -9,7 +9,7 @@ import LoginScreen from './screens/LoginScreen';
 import MainStore from './screens/MainStore';
 import * as Sentry from '@sentry/react-native';
 
-const API_SECRET_KEY = 'zFWqAraDGYhsNzIe76vXOm0hifitH1bxLmQ6S-8qeN8';
+const API_SECRET_KEY = 'c0jEoY0TLL_mFc_jyD_LhtlgPMK3_FBkL53RvRoypEw';
 const API_BASE = 'https://rahul-auto-spares-backend.onrender.com';
 
 const originalFetch = global.fetch;
